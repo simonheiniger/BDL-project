@@ -1,0 +1,14 @@
+{
+  "name": "bld-pets-checkin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "ethers": "^6.17.0",
+    "express": "^4.22.3"
+  }
+}
