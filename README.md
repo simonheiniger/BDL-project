@@ -10,7 +10,7 @@ Jedes Pet ist ein ERC-721-NFT mit **eigener Wallet (ERC-6551 Token Bound Account
 
 | Ordner | Inhalt |
 |---|---|
-| `contracts/` | Solidity (Hardhat 2, OZ 5.0.2): Registry, PetAccount, PetNFT, GameMath, Cosmetics, Trophy, Arena, Marketplace + Tests + Scripts |
+| `contracts/` | Solidity (Hardhat 2, OZ 5.0.2): Registry, PetAccount, PetNFT, PetRenderer/PetDecor (on-chain SVG), GameMath, Cosmetics, Trophy, Arena, Marketplace + Tests + Scripts |
 | `app/` | PWA (Vite, React, wagmi/viem) |
 | `checkin/` | Check-in-Service: prüft Standort (Geohash), signiert EIP-712 |
 | `sim/` | Balance-Simulation (XP-Kurve, Gewinnchancen, Fusion, Supply) |
@@ -46,15 +46,19 @@ oder **MetaMask** (Hardhat-Netz `http://127.0.0.1:8545`, chainId 31337).
 
 ## Kurs-Testnetz (chainId 24888)
 
+RPC: `http://185.48.228.49:8545`. Aktuelles Deployment: Adressen in `app/src/contracts/deployments.json` (Key `24888`).
+
 ```bash
-cp contracts/.env.example contracts/.env      # BDL_RPC_URL + PRIVATE_KEY eines TEST-Accounts eintragen
+# contracts/.env: BDL_RPC_URL + PRIVATE_KEY eines TEST-Accounts (gitignored)
 cd contracts
-CHECKIN_ADDRESS=<Adresse des Check-in-Keys> COOLDOWN=0 MAX_PER_DAY=1000 \
+CHECKIN_ADDRESS=<Adresse zum PRIVATE_KEY> COOLDOWN=0 MAX_PER_DAY=1000 \
   npx hardhat run scripts/deploy.ts --network bdl
 npx hardhat run scripts/seed-demo.ts --network bdl
-# Check-in-Service gegen Testnetz:
-RPC_URL=$BDL_RPC_URL CHECKIN_PRIVATE_KEY=0x... node ../checkin/server.js
-# App: VITE_DEFAULT_CHAIN=24888 VITE_BDL_RPC_URL=... npm run dev
+MINUTES=10 npx hardhat run scripts/create-tournament.ts --network bdl
+TID=<id> npx hardhat run scripts/settle.ts --network bdl     # nach Turnierende
+
+cd ../checkin && npm run start:bdl     # Check-in-Service gegen Testnetz (Key aus contracts/.env)
+cd ../app && npm run dev:bdl           # App auf Testnetz, Login nur via MetaMask (Netz "BDL-Test")
 ```
 
 Produktionswerte statt Demo: `COOLDOWN=14400 MAX_PER_DAY=6`.
@@ -62,9 +66,10 @@ Produktionswerte statt Demo: `COOLDOWN=14400 MAX_PER_DAY=6`.
 ## Tests
 
 ```bash
-cd contracts && npx hardhat test          # 27 Tests inkl. E2E-Szenario + 32-Teilnehmer-Gas-Test
+cd contracts && npx hardhat test          # 31 Tests inkl. E2E-Szenario + 32-Teilnehmer-Gas-Test
 cd checkin && npm test                    # Geohash
 node sim/balance-sim.mjs                  # Balance-Tabellen + CSVs in sim/out/
+cd contracts && npx hardhat run scripts/gallery.ts   # Pet-Galerie -> docs/gallery/index.html
 ```
 
 ## NFC

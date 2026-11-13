@@ -1,12 +1,11 @@
-import { useAccount, useChainId } from "wagmi";
+import { useAccount } from "wagmi";
 import { formatEther } from "viem";
 import { useContracts } from "../contracts";
 import { useChainQuery, useMyPets, useTx, loadPet } from "../hooks";
-import { PetCard, TxStatus } from "../components/common";
+import { NftCard, TxStatus } from "../components/common";
 
 export default function Home() {
   const { isConnected } = useAccount();
-  const chainId = useChainId();
   const c = useContracts();
   const { data: ids } = useMyPets();
   const { data: views } = useChainQuery(
@@ -48,8 +47,8 @@ export default function Home() {
       </div>
       <TxStatus {...tx} />
       {views?.length === 0 && <p className="muted">Noch keine Pets. Schlüpfe dein erstes!</p>}
-      <div className="grid">
-        {views?.map((v) => <PetCard key={v.id.toString()} view={v} chainId={chainId} />)}
+      <div className="cards">
+        {views?.map((v) => <NftCard key={v.id.toString()} view={v} />)}
       </div>
     </>
   );

@@ -41,14 +41,18 @@ async function main() {
     cooldown,
     maxPerDay,
   ]);
+  const decor = await deploy("PetDecor");
+  const renderer = await deploy("PetRenderer", [await decor.getAddress()]);
   const cosmetics = await deploy("Cosmetics", ["https://bld-pets.local/cosmetics/{id}.json"]);
   const trophy = await deploy("Trophy");
   const arena = await deploy("Arena", [await pets.getAddress(), await trophy.getAddress(), checkinSigner]);
   const market = await deploy("Marketplace", [await pets.getAddress()]);
 
   await (await (pets as any).setGameContracts(await cosmetics.getAddress(), await trophy.getAddress())).wait();
+  await (await (pets as any).setRenderer(await renderer.getAddress())).wait();
   await (await (trophy as any).setRoles(await arena.getAddress(), await pets.getAddress())).wait();
 
+  // Reihenfolge = Item-ID 1..5; PetDecor.cosmetic(id) zeichnet genau diese Items
   const shop: [string, string, number][] = [
     ["Zylinder", "0.002", 500],
     ["Sonnenbrille", "0.001", 1000],
@@ -64,6 +68,7 @@ async function main() {
     ERC6551Registry: await registry.getAddress(),
     PetAccount: await accountImpl.getAddress(),
     PetNFT: await pets.getAddress(),
+    PetRenderer: await renderer.getAddress(),
     Cosmetics: await cosmetics.getAddress(),
     Trophy: await trophy.getAddress(),
     Arena: await arena.getAddress(),

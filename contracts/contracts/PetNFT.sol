@@ -4,14 +4,22 @@ pragma solidity ^0.8.24;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IERC6551Registry} from "./erc6551/IERC6551.sol";
 import {PetAccount} from "./PetAccount.sol";
 import {GameMath} from "./lib/GameMath.sol";
+import {Pet} from "./lib/PetTypes.sol";
 
 interface ITrophyMigrate {
     function migrate(address from, address to) external;
+}
+
+interface ICosmeticsView {
+    function balanceOf(address account, uint256 id) external view returns (uint256);
+    function items(uint256 id) external view returns (string memory name, uint128 price, uint64 maxSupply, uint64 minted);
+}
+
+interface IPetRenderer {
+    function tokenURI(uint256 id, Pet memory p, uint256 itemId, string memory itemName) external view returns (string memory);
 }
 
 /// @title PetNFT – das Tier selbst (ERC-721) inkl. Stats, XP-Loop und Fusion
@@ -19,8 +27,6 @@ interface ITrophyMigrate {
 /// @dev Stats liegen hier (nicht im TBA): Die Spiellogik braucht eine autoritative Quelle,
 ///      und da sie an der tokenId haengen, wechseln sie beim Verkauf trotzdem automatisch mit.
 contract PetNFT is ERC721, Ownable, ReentrancyGuard {
-    using Strings for uint256;
-
     /// Reihenfolge = Stat-Index (STR, AGI, INT, VIT)
     enum Action {
         Train,
@@ -29,21 +35,10 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         Feed
     }
 
-    struct Pet {
-        uint16[4] stats; // STR, AGI, INT, VIT
-        uint8[4] focus; // Aktionen pro Stat seit letztem Level-Up
-        uint16 level;
-        uint32 xp; // XP innerhalb des aktuellen Levels
-        uint64 lastAction;
-        uint64 dayStart;
-        uint16 actionsToday;
-        uint8 fusionCount;
-        uint8 generation;
-        uint8 species;
-    }
-
     uint256 public constant XP_PER_ACTION = 20;
     uint256 public constant MAX_ITEM_ID = 32; // Cosmetics-IDs 1..32 (fuer Inventar-Migration)
+    uint256 public constant GENE_SLOTS = 7; // Anzahl 16-Bit-Gene in der DNA (siehe PetRenderer)
+    uint256 public constant MUTATION_RATE = 16; // 1/16 Chance pro Gen, bei Fusion neu zu wuerfeln
 
     IERC6551Registry public immutable registry;
     address public immutable accountImpl;
@@ -53,6 +48,8 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
     address public cosmetics;
     address public trophy;
+    /// @notice Bild/Metadaten-Generator. Austauschbar (Kunst kann sich weiterentwickeln, Spielwerte nicht).
+    IPetRenderer public renderer;
 
     uint256 private _nextId = 1;
     mapping(uint256 => Pet) private _pets;
@@ -61,6 +58,8 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     event Interacted(uint256 indexed petId, Action action, uint256 level, uint256 xp);
     event LevelUp(uint256 indexed petId, uint256 newLevel, uint8 focusStat);
     event Fused(uint256 indexed keepId, uint256 indexed burnId, uint256 newLevel, uint8 fusionCount);
+    event Equipped(uint256 indexed petId, uint8 itemId);
+    event RendererChanged(address renderer);
 
     error WrongPayment();
     error NotPetOwner();
@@ -70,6 +69,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     error FusionNotAllowed();
     error SelfOwnership();
     error AlreadyConfigured();
+    error ItemNotOwned();
 
     constructor(
         IERC6551Registry registry_,
@@ -92,6 +92,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         trophy = trophy_;
     }
 
+    /// @dev Trust-Trade-off: Owner kann das Aussehen aendern, aber nie Stats, Level oder Besitz.
+    function setRenderer(IPetRenderer renderer_) external onlyOwner {
+        renderer = renderer_;
+        emit RendererChanged(address(renderer_));
+    }
+
     // ------------------------------------------------------------------ Mint
 
     function mint() external payable returns (uint256 petId) {
@@ -107,7 +113,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         }
         p.level = 1;
         p.generation = 1;
-        p.species = uint8((seed >> 64) % 4);
+        p.dna = uint256(keccak256(abi.encode(seed, "dna")));
 
         _safeMint(msg.sender, petId);
         address acc = registry.createAccount(accountImpl, bytes32(0), block.chainid, address(this), petId);
@@ -176,6 +182,18 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         emit LevelUp(petId, newLevel, best);
     }
 
+    // ------------------------------------------------------------------ Cosmetics anziehen
+
+    /// @notice Cosmetic sichtbar am Pet tragen (on-chain -> erscheint im NFT-Bild auf jedem Marktplatz).
+    /// @dev Item muss in der Pet-Wallet liegen. Wird es spaeter entfernt, verschwindet es aus dem Bild
+    ///      (tokenURI prueft den Bestand live). 0 = ausziehen.
+    function equip(uint256 petId, uint8 itemId) external {
+        if (ownerOf(petId) != msg.sender) revert NotPetOwner();
+        if (itemId != 0 && ICosmeticsView(cosmetics).balanceOf(accountOf(petId), itemId) == 0) revert ItemNotOwned();
+        _pets[petId].equipped = itemId;
+        emit Equipped(petId, itemId);
+    }
+
     // ------------------------------------------------------------------ Fusion 2 -> 1
 
     /// @notice Verschmilzt `burnId` in `keepId`. Inventar und Trophaeen wandern ins TBA von keepId.
@@ -204,6 +222,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         k.fusionCount = uint8(fc + 1);
         k.generation = (k.generation > b.generation ? k.generation : b.generation) + 1;
         k.focus = [uint8(0), 0, 0, 0];
+        k.dna = _mixDna(k.dna, b.dna, keepId, burnId);
 
         // 3) Burn = Token-Sink
         delete _pets[burnId];
@@ -228,54 +247,36 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         return super._update(to, tokenId, auth);
     }
 
+    // ------------------------------------------------------------------ Genetik
+
+    /// @notice Gen-Vererbung: jedes Gen kommt zufaellig von einem Elternteil, mit 1/16 Mutationschance.
+    /// @dev Zufall aus prevrandao/blockhash: beeinflussbar, aber nur fuers Aussehen relevant (nicht fuer Stats).
+    function _mixDna(uint256 a, uint256 b, uint256 keepId, uint256 burnId) internal view returns (uint256 child) {
+        uint256 r = uint256(keccak256(abi.encode(a, b, keepId, burnId, block.prevrandao, blockhash(block.number - 1))));
+        uint256 fresh = uint256(keccak256(abi.encode(r, "mutation")));
+        child = a;
+        for (uint256 i = 0; i < GENE_SLOTS; ++i) {
+            uint256 mask = uint256(0xffff) << (16 * i);
+            uint256 pickB = (r >> i) & 1;
+            uint256 mutate = (r >> (32 + 4 * i)) % MUTATION_RATE == 0 ? 1 : 0;
+            uint256 src = mutate == 1 ? fresh : pickB == 1 ? b : a;
+            child = (child & ~mask) | (src & mask);
+        }
+    }
+
     // ------------------------------------------------------------------ Metadaten (on-chain)
 
     function tokenURI(uint256 petId) public view override returns (string memory) {
         _requireOwned(petId);
         Pet memory p = _pets[petId];
-        string memory json = string.concat(
-            '{"name":"BLD Pet #',
-            petId.toString(),
-            '","description":"Phygitales Web3-Tamagotchi (ZHAW BDL HS26)","image":"data:image/svg+xml;base64,',
-            Base64.encode(bytes(_svg(petId, p))),
-            '","attributes":',
-            _attributes(p),
-            "}"
-        );
-        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
-    }
-
-    function _attributes(Pet memory p) internal pure returns (string memory) {
-        return string.concat(
-            '[{"trait_type":"Level","value":',
-            uint256(p.level).toString(),
-            '},{"trait_type":"STR","value":',
-            uint256(p.stats[0]).toString(),
-            '},{"trait_type":"AGI","value":',
-            uint256(p.stats[1]).toString(),
-            '},{"trait_type":"INT","value":',
-            uint256(p.stats[2]).toString(),
-            '},{"trait_type":"VIT","value":',
-            uint256(p.stats[3]).toString(),
-            '},{"trait_type":"Generation","value":',
-            uint256(p.generation).toString(),
-            "}]"
-        );
-    }
-
-    function _svg(uint256 petId, Pet memory p) internal pure returns (string memory) {
-        string[4] memory colors = ["#f6c177", "#9ccfd8", "#c4a7e7", "#eb6f92"];
-        return string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#1f1d2e"/>',
-            '<circle cx="100" cy="95" r="55" fill="',
-            colors[p.species],
-            '"/><circle cx="80" cy="85" r="7" fill="#191724"/><circle cx="120" cy="85" r="7" fill="#191724"/>',
-            '<text x="100" y="180" text-anchor="middle" font-family="monospace" font-size="16" fill="#e0def4">#',
-            petId.toString(),
-            " Lv ",
-            uint256(p.level).toString(),
-            "</text></svg>"
-        );
+        uint256 item = p.equipped;
+        string memory itemName;
+        if (item != 0 && ICosmeticsView(cosmetics).balanceOf(accountOf(petId), item) > 0) {
+            (itemName,,,) = ICosmeticsView(cosmetics).items(item);
+        } else {
+            item = 0;
+        }
+        return renderer.tokenURI(petId, p, item, itemName);
     }
 
     function _min(uint256 a, uint256 b) private pure returns (uint256) {

@@ -1,11 +1,10 @@
-import { useAccount, useChainId } from "wagmi";
+import { useAccount } from "wagmi";
 import { formatEther, type Address } from "viem";
 import { ITEM_EMOJI, ZERO, useContracts } from "../contracts";
 import { loadInventory, loadPet, useChainQuery, useShopItems, useTx } from "../hooks";
-import { PetCard, TxStatus, short } from "../components/common";
+import { NftCard, TxStatus, short } from "../components/common";
 
 export default function Market() {
-  const chainId = useChainId();
   const { address } = useAccount();
   const c = useContracts();
   const { data: items } = useShopItems();
@@ -53,22 +52,16 @@ export default function Market() {
         </div>
       )}
       {listings?.length === 0 && <p className="muted">Keine aktiven Angebote.</p>}
-      <div className="grid">
+      <div className="cards">
         {listings?.map(({ view, seller, price, accountState, inv }) => {
           const stale = inv.state !== accountState;
           const mine = seller.toLowerCase() === address?.toLowerCase();
           return (
-            <div key={view.id.toString()} className="card">
-              <PetCard
-                view={view}
-                chainId={chainId}
-                extra={
-                  <div className="small">
-                    {inv.cosmetics.map((x) => `${ITEM_EMOJI[x.item.name] ?? "✨"}×${x.amount}`).join(" ")}{" "}
-                    {inv.trophies.length > 0 && `🏆×${inv.trophies.length}`} {inv.eth > 0n && `💰${formatEther(inv.eth)}`}
-                  </div>
-                }
-              />
+            <NftCard key={view.id.toString()} view={view} link={false}>
+              <div className="small inv-line">
+                {inv.cosmetics.map((x) => `${ITEM_EMOJI[x.item.name] ?? "✨"}×${x.amount}`).join(" ")}{" "}
+                {inv.trophies.length > 0 && `🏆×${inv.trophies.length}`} {inv.eth > 0n && `💰${formatEther(inv.eth)}`}
+              </div>
               <div className="row between">
                 <strong>{formatEther(price)} ETH</strong>
                 <span className="muted small">von {short(seller)}</span>
@@ -91,7 +84,7 @@ export default function Market() {
                   Kaufen
                 </button>
               )}
-            </div>
+            </NftCard>
           );
         })}
       </div>

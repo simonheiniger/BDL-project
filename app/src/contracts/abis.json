@@ -615,6 +615,11 @@
     },
     {
       "inputs": [],
+      "name": "ItemNotOwned",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "MaxLevel",
       "type": "error"
     },
@@ -708,6 +713,25 @@
         }
       ],
       "name": "ApprovalForAll",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "petId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint8",
+          "name": "itemId",
+          "type": "uint8"
+        }
+      ],
+      "name": "Equipped",
       "type": "event"
     },
     {
@@ -845,6 +869,19 @@
       "anonymous": false,
       "inputs": [
         {
+          "indexed": false,
+          "internalType": "address",
+          "name": "renderer",
+          "type": "address"
+        }
+      ],
+      "name": "RendererChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
           "indexed": true,
           "internalType": "address",
           "name": "from",
@@ -868,7 +905,33 @@
     },
     {
       "inputs": [],
+      "name": "GENE_SLOTS",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "MAX_ITEM_ID",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MUTATION_RATE",
       "outputs": [
         {
           "internalType": "uint256",
@@ -993,6 +1056,24 @@
           "internalType": "uint256",
           "name": "petId",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "itemId",
+          "type": "uint8"
+        }
+      ],
+      "name": "equip",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "petId",
+          "type": "uint256"
         }
       ],
       "name": "exists",
@@ -1102,11 +1183,16 @@
             },
             {
               "internalType": "uint8",
-              "name": "species",
+              "name": "equipped",
               "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "dna",
+              "type": "uint256"
             }
           ],
-          "internalType": "struct PetNFT.Pet",
+          "internalType": "struct Pet",
           "name": "",
           "type": "tuple"
         }
@@ -1255,6 +1341,19 @@
     },
     {
       "inputs": [],
+      "name": "renderer",
+      "outputs": [
+        {
+          "internalType": "contract IPetRenderer",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "renounceOwnership",
       "outputs": [],
       "stateMutability": "nonpayable",
@@ -1343,6 +1442,19 @@
         }
       ],
       "name": "setGameContracts",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "contract IPetRenderer",
+          "name": "renderer_",
+          "type": "address"
+        }
+      ],
+      "name": "setRenderer",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1471,6 +1583,275 @@
       "name": "withdraw",
       "outputs": [],
       "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "PetRenderer": [
+    {
+      "inputs": [
+        {
+          "internalType": "contract PetDecor",
+          "name": "decor_",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "decor",
+      "outputs": [
+        {
+          "internalType": "contract PetDecor",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "dna",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "level",
+          "type": "uint256"
+        }
+      ],
+      "name": "look",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint8",
+              "name": "palette",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "shape",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "head",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "eyes",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "mouth",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "pattern",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "bg",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "tier",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "stage",
+              "type": "uint8"
+            }
+          ],
+          "internalType": "struct PetRenderer.Look",
+          "name": "l",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint16[4]",
+              "name": "stats",
+              "type": "uint16[4]"
+            },
+            {
+              "internalType": "uint8[4]",
+              "name": "focus",
+              "type": "uint8[4]"
+            },
+            {
+              "internalType": "uint16",
+              "name": "level",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint32",
+              "name": "xp",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "lastAction",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "dayStart",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint16",
+              "name": "actionsToday",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint8",
+              "name": "fusionCount",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "generation",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "equipped",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "dna",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct Pet",
+          "name": "p",
+          "type": "tuple"
+        },
+        {
+          "internalType": "uint256",
+          "name": "itemId",
+          "type": "uint256"
+        }
+      ],
+      "name": "svg",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "id",
+          "type": "uint256"
+        },
+        {
+          "components": [
+            {
+              "internalType": "uint16[4]",
+              "name": "stats",
+              "type": "uint16[4]"
+            },
+            {
+              "internalType": "uint8[4]",
+              "name": "focus",
+              "type": "uint8[4]"
+            },
+            {
+              "internalType": "uint16",
+              "name": "level",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint32",
+              "name": "xp",
+              "type": "uint32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "lastAction",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "dayStart",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint16",
+              "name": "actionsToday",
+              "type": "uint16"
+            },
+            {
+              "internalType": "uint8",
+              "name": "fusionCount",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "generation",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "equipped",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint256",
+              "name": "dna",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct Pet",
+          "name": "p",
+          "type": "tuple"
+        },
+        {
+          "internalType": "uint256",
+          "name": "itemId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "itemName",
+          "type": "string"
+        }
+      ],
+      "name": "tokenURI",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     }
   ],

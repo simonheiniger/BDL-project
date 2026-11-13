@@ -3,7 +3,8 @@
 // Prueft, ob ein Spieler in der Turnier-Zone ist, und stellt dann eine EIP-712-Signatur aus,
 // die Arena.join() on-chain verifiziert. Der Standort selbst geht NIE auf die Blockchain.
 //
-//   RPC_URL=http://127.0.0.1:8545 CHECKIN_PRIVATE_KEY=0x... node server.js
+//   npm start            -> lokaler Hardhat-Node, Test-Key #5
+//   npm run start:bdl    -> Kurs-Testnetz, Key aus contracts/.env
 //
 // Vertrauensannahme (in Praesentation erklaeren): Wer diesen Key hat, kann Check-ins faelschen,
 // und GPS kann vom Client gespooft werden. Next steps: NFC-Tag/rotierender QR am Veranstaltungsort.
@@ -13,9 +14,10 @@ import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { encodeGeohash } from "./geohash.js";
 
-const RPC_URL = process.env.RPC_URL ?? "http://127.0.0.1:8545";
+// `npm run start:bdl` laedt contracts/.env -> BDL_RPC_URL / PRIVATE_KEY werden uebernommen
+const RPC_URL = process.env.RPC_URL ?? process.env.BDL_RPC_URL ?? "http://127.0.0.1:8545";
 // Default = Hardhat-Account #5 (oeffentlich bekannter Test-Key, NUR lokal verwenden!)
-const KEY = process.env.CHECKIN_PRIVATE_KEY ?? "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
+const KEY = process.env.CHECKIN_PRIVATE_KEY ?? process.env.PRIVATE_KEY ?? "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 const PORT = Number(process.env.PORT ?? 8787);
 const VALIDITY_S = 600; // Signatur 10 min gueltig
 const DEMO_BYPASS = process.env.DEMO_BYPASS === "1"; // Laptop-Demo ohne GPS

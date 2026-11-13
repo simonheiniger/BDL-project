@@ -49,7 +49,16 @@ export function useMyPets() {
   );
 }
 
-export type PetView = { id: bigint; owner: Address; account: Address; pet: Pet; image: string };
+export type PetView = {
+  id: bigint;
+  owner: Address;
+  account: Address;
+  pet: Pet;
+  name: string;
+  image: string;
+  /** on-chain Metadaten (PetRenderer), z.B. attrs.Seltenheit, attrs.Stufe */
+  attrs: Record<string, string | number>;
+};
 
 export async function loadPet(pc: PublicClient, c: Contracts, id: bigint): Promise<PetView | null> {
   const owner = await read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "ownerOf", [id]).catch(() => null);
@@ -59,8 +68,11 @@ export async function loadPet(pc: PublicClient, c: Contracts, id: bigint): Promi
     read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "accountOf", [id]),
     read<string>(pc, c.PetNFT.address, c.PetNFT.abi, "tokenURI", [id]),
   ]);
-  const json = JSON.parse(atob(uri.split(",")[1]));
-  return { id, owner, account, pet, image: json.image };
+  const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(uri.split(",")[1]), (c) => c.charCodeAt(0))));
+  const attrs = Object.fromEntries(
+    (json.attributes as { trait_type: string; value: string | number }[]).map((a) => [a.trait_type, a.value]),
+  );
+  return { id, owner, account, pet, name: json.name, image: json.image, attrs };
 }
 
 export function usePet(id: bigint | undefined) {

@@ -8,3 +8,5 @@ contracts/coverage.json
 app/dist/
 sim/out/
 contracts/seeds/
+*.local
+session.txt

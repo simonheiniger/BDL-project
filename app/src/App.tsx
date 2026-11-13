@@ -20,7 +20,7 @@ function Wallet() {
         <button className="btn" disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>
           MetaMask verbinden
         </button>
-        <button
+        {import.meta.env.VITE_DEFAULT_CHAIN !== "24888" && <button
           className="btn small"
           disabled={isPending}
           title="Unlocked Hardhat-Account (nur lokaler Node)"
@@ -30,7 +30,7 @@ function Wallet() {
           }}
         >
           Demo-Wallet
-        </button>
+        </button>}
       </div>
     );
   }

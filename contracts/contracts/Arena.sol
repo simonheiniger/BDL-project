@@ -8,6 +8,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {PetNFT} from "./PetNFT.sol";
 import {Trophy} from "./Trophy.sol";
 import {GameMath} from "./lib/GameMath.sol";
+import {Pet} from "./lib/PetTypes.sol";
 
 /// @title Arena – regionale Turniere mit Geofence-Check-in und gewichtetem Zufall
 /// @notice Ablauf: create (Seed-Commit) -> join (signierter Check-in) -> close (Blockhash fixieren)
@@ -154,7 +155,7 @@ contract Arena is EIP712, Ownable, ReentrancyGuard {
 
         petJoined[id][petId] = true;
         playerJoined[id][msg.sender] = true;
-        PetNFT.Pet memory p = pets.getPet(petId);
+        Pet memory p = pets.getPet(petId);
         _entries[id].push(Entry(petId, msg.sender, p.stats, p.level));
         emit Joined(id, petId, msg.sender);
     }

@@ -22,6 +22,17 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Warum Soulbound für Trophäen? | Sonst könnte man Trophäen kaufen und auf beliebige Pets legen → Historie wertlos. |
 | Warum PetNFT nicht ERC721Enumerable? | Enumerable verteuert jeden Transfer. Frontend findet eigene Pets über Transfer-Events. Trophy ist dagegen Enumerable, weil `migrate` alle Trophäen eines TBA aufzählen muss. |
 
+## Aussehen (NFT-Kunst)
+
+| Frage | Antwort |
+|---|---|
+| Warum Bild on-chain statt IPFS? | Kein externer Dienst, der ausfallen kann; das Bild hängt live am Zustand (Level, Cosmetic). Bei IPFS müsste man bei jedem Level-Up neue Metadaten hochladen und einem Server vertrauen. |
+| Warum zwei Render-Contracts? | Ein Contract darf max. 24 KB Code haben (EIP-170). Renderer ~20 KB + Decor ~7 KB. |
+| Warum ist der Renderer austauschbar? | Kunst soll sich weiterentwickeln können. Trade-off: Owner kann das Aussehen ändern – aber nie Stats, Level oder Besitz. Strengere Variante: `setRenderer` nach Launch sperren. |
+| Ist die DNA manipulierbar? | Sie stammt aus `blockhash`/`prevrandao` beim Mint – ein Validator könnte theoretisch auf seltene DNA zielen. Akzeptiert, weil Aussehen keinen Einfluss auf Turniere hat. |
+| Warum prüft `tokenURI` den Item-Bestand live? | Sonst könnte man ein Item anziehen, verkaufen und es wäre trotzdem im Bild sichtbar. |
+| Warum gewichtete Traits statt Gleichverteilung? | Seltenheit erzeugt Sammelwert; die Verteilung ist im Code nachprüfbar (Transparenz). |
+
 ## Sicherheit
 
 | Frage | Antwort |

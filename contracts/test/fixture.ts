@@ -18,6 +18,9 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
     cooldown,
     maxPerDay,
   ]);
+  const decor = await ethers.deployContract("PetDecor");
+  const renderer = await ethers.deployContract("PetRenderer", [await decor.getAddress()]);
+  await pets.setRenderer(await renderer.getAddress());
   const cosmetics = await ethers.deployContract("Cosmetics", ["ipfs://cosmetics/{id}.json"]);
   const trophy = await ethers.deployContract("Trophy");
   const arena = await ethers.deployContract("Arena", [
@@ -31,8 +34,9 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
   await trophy.setRoles(await arena.getAddress(), await pets.getAddress());
   await cosmetics.addItem("Zylinder", ethers.parseEther("0.001"), 100);
   await cosmetics.addItem("Sonnenbrille", ethers.parseEther("0.002"), 2);
+  await cosmetics.addItem("Krone", ethers.parseEther("0.02"), 50);
 
-  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, pets, cosmetics, trophy, arena, market };
+  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, renderer, pets, cosmetics, trophy, arena, market };
 }
 
 export async function mintPet(pets: PetNFT, who: HardhatEthersSigner) {

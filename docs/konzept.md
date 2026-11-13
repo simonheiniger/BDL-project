@@ -107,6 +107,35 @@ Kettenfusion (Stat 40 + 40): Bonus +12, +6, +4, +3, +2 … → **Diminishing Ret
 aber trotzdem: Pro Spieler und Turnier startet nur ein Pet, und die Stats steigen. In der Supply-Simulation (500 Mints/Woche)
 erreicht die Burn-Rate nach einem Jahr ~58 % der Mint-Rate.
 
+### 1.5 Aussehen: DNA, Seltenheit, Evolution
+
+Jedes Pet bekommt beim Mint eine **DNA** (`uint256`). Die unteren 112 Bit sind 7 Gene à 16 Bit; daraus erzeugt
+`PetRenderer` Bild und Traits **komplett on-chain** (SVG, kein IPFS, kein Server).
+
+| Gen | Varianten (Wahrscheinlichkeit) |
+|---|---|
+| Farbe | 6 gewöhnliche (80 %), Lagune/Lava (12 %), Galaxie (6 %), Gold (2 %) |
+| Form | Mochi, Tropfen, Bohne, Birne (je 25 %) |
+| Kopf | Keiner, Katzenohren, Hasenohren, Antennen, Spross, Hörner (10 %), Heiligenschein (5 %) |
+| Augen | Kuller, Schläfrig, Zwinkernd, Funkelnd, Herz (12 %), Sterne (8 %) |
+| Mund / Muster / Hintergrund | 4 / 5 / 6 Varianten |
+
+**Seltenheit** = Summe der Trait-Punkte (Gold 6, Galaxie 4, Lagune/Lava 2, Sterne 2, Herz 1, Heiligenschein 3,
+Hörner 1, Herz-Muster 1) → Common (< 2) / Rare (≥ 2) / Epic (≥ 4) / Legendary (≥ 6).
+Gemessen über 1 000 Pets (`N=1000 npx hardhat run scripts/gallery.ts`): **67 % / 20 % / 10 % / 4 %**.
+Die Seltenheit ist im Bild selbst sichtbar (farbiger Rahmen + Badge), also auf jedem NFT-Marktplatz.
+
+**Evolution** nach Level: Ei (Lv 1) → Baby (2–4) → Erwachsen (5–14, Kopf-Trait erscheint) → Legendär (15+, Aura).
+Pflege verändert damit sichtbar das NFT – das Bild ist ein Abbild des on-chain Zustands.
+
+**Fusion vererbt Gene:** Jedes Gen kommt zufällig von einem Elternteil, mit 1/16 Chance pro Gen auf eine Mutation
+(neu gewürfelt) → Fusion kann einen selteneren Look erzeugen. Fusionierte Pets tragen ein Juwel auf der Stirn.
+
+**Cosmetics im Bild:** `equip(petId, itemId)` speichert das getragene Item on-chain. `tokenURI` prüft bei jedem Aufruf,
+ob das Item noch in der Pet-Wallet liegt – wird es verkauft oder verschoben, verschwindet es aus dem Bild.
+
+Galerie aller Varianten: `docs/gallery/index.html`.
+
 ## 2. Smart-Contract-Architektur
 
 ```
@@ -125,7 +154,8 @@ erreicht die Burn-Rate nach einem Jahr ~58 % der Mint-Rate.
 |---|---|
 | `ERC6551Registry` | EIP-6551-Registry (lesbare Solidity-Variante). Account-Adresse = CREATE2(salt, Proxy-Bytecode + Footer). Eigene Instanz, weil das Kurs-Netz keine kanonische Registry hat. |
 | `PetAccount` | Account-Implementation. Liest seine NFT-Bindung aus dem Proxy-Footer (`extcodecopy`). `owner()` = Owner des NFTs. `execute()` nur Owner, erhöht `state`. `approve`/`setApprovalForAll` gesperrt. `sweepTo()` nur für PetNFT. |
-| `PetNFT` | Mint (legt TBA an), Pflege-Loop, Fusion, on-chain `tokenURI` (JSON + SVG, keine IPFS-Abhängigkeit). Verhindert Transfer eines Pets in die eigene Wallet. |
+| `PetNFT` | Mint (legt TBA an, würfelt DNA), Pflege-Loop, Fusion inkl. Gen-Mischung, `equip()`. `tokenURI` delegiert an den Renderer. Verhindert Transfer eines Pets in die eigene Wallet. |
+| `PetRenderer` / `PetDecor` | Erzeugen SVG + Metadaten aus DNA, Level, Generation und getragenem Cosmetic. Zwei Contracts wegen 24-KB-Limit (EIP-170). |
 | `Cosmetics` | ERC-1155 mit Shop (`buy(id, amount, to)` → direkt ins TBA), Max-Supply pro Item. |
 | `Trophy` | Soulbound: `_update` revertiert ausser beim Mint (nur Arena) und bei Fusion-Migration (nur PetNFT). |
 | `Arena` | Turniere: Check-in-Signatur prüfen, Stats-Snapshot beim Join, Commit-Reveal, Trophy-Mint, Preisgeld-Split. |

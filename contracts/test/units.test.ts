@@ -14,6 +14,8 @@ import {
 } from "./fixture";
 
 const fast = () => deployAll();
+const decodeUri = (uri: string) => JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
+const attrs = (json: any) => Object.fromEntries(json.attributes.map((a: any) => [a.trait_type, a.value]));
 const prod = () => deployAll(60n, 6n);
 
 describe("ERC-6551: Registry + PetAccount", () => {
@@ -140,13 +142,52 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
     await pets.connect(alice).interact(id, 3);
   });
 
-  it("tokenURI ist gueltiges on-chain JSON", async () => {
+  it("tokenURI: gueltiges on-chain JSON mit Traits, Stufe Ei bei Lv 1", async () => {
     const { pets, alice } = await loadFixture(fast);
     const { id } = await mintPet(pets, alice);
-    const uri = await pets.tokenURI(id);
-    const json = JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
-    expect(json.name).to.equal(`BLD Pet #${id}`);
-    expect(json.attributes[0]).to.deep.equal({ trait_type: "Level", value: 1 });
+    const json = decodeUri(await pets.tokenURI(id));
+    expect(json.name).to.match(new RegExp(`-.+ #${id}$`));
+    expect(json.image).to.match(/^data:image\/svg\+xml;base64,/);
+    const attr = Object.fromEntries(json.attributes.map((a: any) => [a.trait_type, a.value]));
+    expect(attr.Stufe).to.equal("Ei");
+    expect(attr.Level).to.equal(1);
+    expect(["Common", "Rare", "Epic", "Legendary"]).to.include(attr.Seltenheit);
+  });
+
+  it("Evolution: Baby ab Lv 2, Erwachsen ab Lv 5", async () => {
+    const { pets, alice } = await loadFixture(fast);
+    const { id } = await mintPet(pets, alice);
+    await interactN(pets, alice, id, 3);
+    expect(attrs(decodeUri(await pets.tokenURI(id))).Stufe).to.equal("Baby");
+    await interactN(pets, alice, id, 40);
+    expect(attrs(decodeUri(await pets.tokenURI(id))).Stufe).to.equal("Erwachsen");
+  });
+});
+
+describe("Cosmetics on-chain anziehen", () => {
+  it("equip nur mit Item im TBA; erscheint in tokenURI, verschwindet wenn Item weg", async () => {
+    const { pets, cosmetics, alice } = await loadFixture(fast);
+    const { id, account } = await mintPet(pets, alice);
+    await expect(pets.connect(alice).equip(id, 3)).to.be.revertedWithCustomError(pets, "ItemNotOwned");
+    await cosmetics.connect(alice).buy(3, 1, account, { value: ethers.parseEther("0.02") });
+    await pets.connect(alice).equip(id, 3);
+    expect(attrs(decodeUri(await pets.tokenURI(id))).Cosmetic).to.equal("Krone");
+
+    const acc = await ethers.getContractAt("PetAccount", account);
+    const data = cosmetics.interface.encodeFunctionData("safeTransferFrom", [account, alice.address, 3n, 1n, "0x"]);
+    await acc.connect(alice).execute(await cosmetics.getAddress(), 0n, data, 0);
+    expect(attrs(decodeUri(await pets.tokenURI(id))).Cosmetic).to.equal("Keins");
+  });
+
+  it("Nur Owner darf anziehen", async () => {
+    const { pets, alice, bob } = await loadFixture(fast);
+    const { id } = await mintPet(pets, alice);
+    await expect(pets.connect(bob).equip(id, 0)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+  });
+
+  it("Renderer nur durch Owner austauschbar", async () => {
+    const { pets, alice } = await loadFixture(fast);
+    await expect(pets.connect(alice).setRenderer(alice.address)).to.be.revertedWithCustomError(pets, "OwnableUnauthorizedAccount");
   });
 });
 
@@ -317,6 +358,17 @@ describe("Fusion 2 -> 1", () => {
     expect(lvl).to.be.gt(pa.level); // 80 + 21.5 Aktionen -> Level-Boost
     expect(pk.fusionCount).to.equal(1n);
     expect(pk.generation).to.equal(2n);
+    // Gen-Vererbung: jedes 16-Bit-Gen stammt von A, B oder ist eine Mutation; Bits ueber den Genen bleiben von A
+    const mask = (1n << 112n) - 1n;
+    expect(pk.dna >> 112n).to.equal(pa.dna >> 112n);
+    let fromA = 0, fromB = 0;
+    for (let i = 0n; i < 7n; i++) {
+      const g = (x: bigint) => (x >> (16n * i)) & 0xffffn;
+      if (g(pk.dna) === g(pa.dna)) fromA++;
+      else if (g(pk.dna) === g(pb.dna)) fromB++;
+    }
+    expect(fromA + fromB).to.be.gte(4); // max. wenige Mutationen
+    expect(pk.dna & mask).to.not.equal(0n);
     expect(await pets.exists(b.id)).to.equal(false);
     await expect(pets.ownerOf(b.id)).to.be.revertedWithCustomError(pets, "ERC721NonexistentToken");
   });

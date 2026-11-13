@@ -4,7 +4,7 @@ import deployments from "./contracts/deployments.json";
 import abis from "./contracts/abis.json";
 
 // deployments.json + abis.json werden von contracts/scripts/deploy.ts geschrieben.
-type Name = "PetNFT" | "PetAccount" | "Cosmetics" | "Trophy" | "Arena" | "Marketplace";
+type Name = "PetNFT" | "PetRenderer" | "PetAccount" | "Cosmetics" | "Trophy" | "Arena" | "Marketplace";
 
 export type Contracts = Record<Name, { address: Address; abi: Abi }>;
 
@@ -15,6 +15,7 @@ export function useContracts(): Contracts | null {
   const c = (n: Name) => ({ address: d[n] as Address, abi: (abis as Record<string, unknown>)[n] as Abi });
   return {
     PetNFT: c("PetNFT"),
+    PetRenderer: c("PetRenderer"),
     PetAccount: c("PetAccount"),
     Cosmetics: c("Cosmetics"),
     Trophy: c("Trophy"),
@@ -52,8 +53,11 @@ export type Pet = {
   actionsToday: number;
   fusionCount: number;
   generation: number;
-  species: number;
+  equipped: number;
+  dna: bigint;
 };
+
+export const TIERS = ["Common", "Rare", "Epic", "Legendary"] as const;
 
 export const ZERO = "0x0000000000000000000000000000000000000000";
 

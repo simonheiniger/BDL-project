@@ -290,3 +290,183 @@ tr.winner {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------ Sammelkarten */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
+}
+.nft-link {
+  text-decoration: none;
+  color: inherit;
+}
+.nft {
+  --tier: #6e6a86;
+  --holo: 0.18;
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  border-radius: 18px;
+  padding: 10px;
+  background: linear-gradient(160deg, #2e2a47, #1b1930);
+  border: 2px solid var(--tier);
+  box-shadow: 0 8px 28px -10px var(--tier), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transform: perspective(900px) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.2s ease-out, box-shadow 0.2s;
+  overflow: hidden;
+  isolation: isolate;
+}
+.nft:hover {
+  box-shadow: 0 14px 40px -8px var(--tier), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.nft.sm {
+  width: 150px;
+  padding: 6px;
+  border-radius: 14px;
+}
+.nft.sm .nft-info {
+  font-size: 0.8em;
+}
+.nft.lg {
+  width: min(340px, 100%);
+}
+.nft .art {
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: #15132a;
+}
+.nft .art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.nft .art.awake {
+  animation: wake 0.6s ease-in-out 3;
+}
+.nft-info {
+  padding: 8px 4px 2px;
+}
+.nft-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lv {
+  font-weight: 700;
+  font-size: 0.85em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tier);
+  color: #1b1930;
+  flex-shrink: 0;
+}
+.tier-label {
+  color: var(--tier);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}
+.inv-line {
+  margin: 4px 0;
+}
+.nft .holo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 30%), rgba(255, 255, 255, 0.35), transparent 45%),
+    linear-gradient(
+      115deg,
+      transparent 25%,
+      rgba(255, 120, 220, 0.35) calc(var(--mx, 50%) - 12%),
+      rgba(120, 220, 255, 0.35) var(--mx, 50%),
+      rgba(255, 240, 140, 0.35) calc(var(--mx, 50%) + 12%),
+      transparent 75%
+    );
+  mix-blend-mode: color-dodge;
+  opacity: 0;
+  transition: opacity 0.25s;
+  z-index: 2;
+}
+.nft:hover .holo {
+  opacity: var(--holo);
+}
+.nft.tier-rare {
+  --tier: #4cc9f0;
+  --holo: 0.45;
+}
+.nft.tier-epic {
+  --tier: #b15cff;
+  --holo: 0.65;
+}
+.nft.tier-legendary {
+  --tier: #ffc83d;
+  --holo: 0.9;
+  border-color: transparent;
+  background:
+    linear-gradient(160deg, #2e2a47, #1b1930) padding-box,
+    conic-gradient(from var(--spin, 0deg), #ffc83d, #ff7ad9, #7df9ff, #ffc83d) border-box;
+  animation: spin 4s linear infinite;
+}
+@property --spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes spin {
+  to {
+    --spin: 360deg;
+  }
+}
+.nft.tier-legendary .holo {
+  opacity: 0.25;
+}
+.nft.tier-legendary:hover .holo {
+  opacity: var(--holo);
+}
+.traits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+.trait {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.pethero {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.pethero > .card {
+  margin: 0;
+  min-width: 260px;
+}
+.badge.nfc {
+  background: var(--accent);
+  color: #191724;
+  margin-bottom: 6px;
+}
+.evo {
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nft,
+  .nft.tier-legendary {
+    animation: none;
+    transform: none;
+  }
+}
+.nft.sm .nft-info .row.small .muted {
+  display: none;
+}

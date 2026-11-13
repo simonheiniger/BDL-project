@@ -1,29 +1,24 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 import { ACTIONS, ITEM_EMOJI, STAT_NAMES, ZERO, accountAbi, useContracts, zoneString } from "../contracts";
 import { useChainQuery, useInventory, usePet, useShopItems, useTx } from "../hooks";
-import { PetImage, StatBars, TxStatus, XpBar, equippedKey, getEquipped, short } from "../components/common";
+import { NftCard, StatBars, Traits, TxStatus, XpBar, short } from "../components/common";
 
 export default function PetPage() {
   const { id: idParam } = useParams();
   const [search] = useSearchParams();
   const id = idParam ? BigInt(idParam) : undefined;
-  const chainId = useChainId();
   const { address } = useAccount();
   const c = useContracts();
   const { data: view, isLoading } = usePet(id);
   const { data: inv } = useInventory(view?.account);
   const { data: items } = useShopItems();
   const tx = useTx();
-  const [equipped, setEquipped] = useState<string | null>(null);
   const [awake, setAwake] = useState(search.has("nfc"));
   const [price, setPrice] = useState("0.05");
 
-  useEffect(() => {
-    if (id !== undefined) setEquipped(getEquipped(chainId, id));
-  }, [id, chainId]);
   useEffect(() => {
     if (!awake) return;
     const t = setTimeout(() => setAwake(false), 2500);
@@ -52,32 +47,24 @@ export default function PetPage() {
   const { pet } = view;
   const isOwner = address?.toLowerCase() === view.owner.toLowerCase();
 
-  function equip(name: string | null) {
-    try {
-      if (name) localStorage.setItem(equippedKey(chainId, id!), name);
-      else localStorage.removeItem(equippedKey(chainId, id!));
-    } catch {
-      /* privater Modus */
-    }
-    setEquipped(name);
-  }
+  const equippedId = Number(pet.equipped);
+  const equip = (itemId: number) =>
+    tx.send(itemId ? "Anziehen" : "Ausziehen", { ...c.PetNFT, functionName: "equip", args: [id, itemId] });
 
   return (
     <>
       <TxStatus {...tx} />
-      <section className="card pethero">
-        <PetImage image={view.image} equipped={equipped} size={200} awake={awake} />
-        <div className="grow">
-          {search.has("nfc") && <div className="badge">📡 NFC-Haus gescannt – Pet aufgeweckt!</div>}
-          <h2>Pet #{view.id.toString()}</h2>
-          <div className="muted">
-            Level {Number(pet.level)} · Generation {Number(pet.generation)} · {Number(pet.fusionCount)} Fusionen
-          </div>
+      <section className="pethero">
+        <NftCard view={view} size="lg" awake={awake} link={false} />
+        <div className="grow card">
+          {search.has("nfc") && <div className="badge nfc">📡 NFC-Haus gescannt – Pet aufgeweckt!</div>}
           <div className="muted small">
-            Owner {short(view.owner)} {isOwner && "(du)"}
+            Token #{view.id.toString()} · {Number(pet.fusionCount)} Fusionen · Owner {short(view.owner)} {isOwner && "(du)"}
           </div>
           <XpBar pet={pet} />
           <StatBars stats={pet.stats} />
+          <h4>Traits (on-chain aus DNA)</h4>
+          <Traits view={view} />
         </div>
       </section>
 
@@ -130,16 +117,16 @@ export default function PetPage() {
           )}
         </div>
 
-        <h4>Cosmetics</h4>
+        <h4>Cosmetics {isOwner && <span className="muted small">– antippen zum An-/Ausziehen (on-chain, sichtbar im NFT-Bild)</span>}</h4>
         {inv?.cosmetics.length === 0 && <p className="muted">Keine.</p>}
         <div className="row wrap">
           {inv?.cosmetics.map(({ item, amount }) => (
             <button
               key={item.id}
-              className={`chip ${equipped === item.name ? "active" : ""}`}
-              disabled={!isOwner}
-              onClick={() => equip(equipped === item.name ? null : item.name)}
-              title="Rein kosmetisch – kein Einfluss auf Stats"
+              className={`chip ${equippedId === item.id ? "active" : ""}`}
+              disabled={!isOwner || !!tx.pending}
+              onClick={() => equip(equippedId === item.id ? 0 : item.id)}
+              title="Anziehen = on-chain, erscheint im NFT-Bild. Kein Einfluss auf Stats."
             >
               {ITEM_EMOJI[item.name] ?? "✨"} {item.name} ×{amount.toString()}
             </button>

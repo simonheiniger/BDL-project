@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "start:bdl": "node --env-file=../contracts/.env server.js"
   },
   "dependencies": {
     "cors": "^2.8.6",

@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useChainId } from "wagmi";
 import { useContracts } from "../contracts";
 import { fusePreview } from "../gamemath";
 import { loadPet, useChainQuery, useInventory, useMyPets, useTx } from "../hooks";
-import { PetImage, StatBars, TxStatus, getEquipped } from "../components/common";
+import { NftCard, StatBars, TxStatus } from "../components/common";
 
 const MIN_LEVEL = 5;
 
 export default function Fusion() {
-  const chainId = useChainId();
   const c = useContracts();
   const { data: ids } = useMyPets();
   const { data: views } = useChainQuery(
@@ -65,9 +63,9 @@ export default function Fusion() {
       {preview && keep && burn && (
         <section className="card">
           <div className="row fusionrow">
-            <PetImage image={keep.image} equipped={getEquipped(chainId, keep.id)} size={90} />
+            <NftCard view={keep} size="sm" link={false} />
             <span className="big">+</span>
-            <PetImage image={burn.image} size={90} />
+            <NftCard view={burn} size="sm" link={false} />
             <span className="big">→</span>
             <div>
               <strong>Pet #{keep.id.toString()}</strong>
@@ -80,6 +78,11 @@ export default function Fusion() {
           <StatBars stats={preview.stats} compare={keep.pet.stats.map(Number)} />
           <p className="muted small">
             Vererbung: Stat = max + 30% × min / (1 + bisherige Fusionen) · XP = XP₁ + 50% × XP₂
+          </p>
+          <p className="small">
+            🧬 Aussehen: Jedes der 7 Gene (Farbe, Form, Kopf, Augen, Mund, Muster, Hintergrund) kommt zufällig von einem
+            der beiden Eltern – mit 1/16 Chance pro Gen auf eine <strong>Mutation</strong>. Mit Glück entsteht ein
+            seltenerer Look. Das Fusions-Juwel zeigt, dass das Pet aus einer Fusion stammt.
           </p>
           {burnInv && (
             <p className="small">
