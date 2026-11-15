@@ -8,22 +8,22 @@ contract PetDecor {
 
     function cosmetic(uint256 id) external pure returns (string memory) {
         if (id == 1) {
-            return '<g><rect x="150" y="66" width="100" height="72" rx="8" fill="#2b2340"/><rect x="150" y="116" width="100" height="14" fill="#e63946"/><ellipse cx="200" cy="140" rx="80" ry="14" fill="#2b2340"/><rect x="160" y="74" width="10" height="40" rx="5" fill="#fff" opacity=".15"/></g>';
+            return '<g><rect x="152" y="32" width="96" height="74" rx="8" fill="#2b2340"/><rect x="152" y="84" width="96" height="14" fill="#e63946"/><ellipse cx="200" cy="108" rx="78" ry="14" fill="#2b2340"/><rect x="162" y="40" width="10" height="40" rx="5" fill="#fff" opacity=".15"/></g>';
         }
         if (id == 2) {
-            return '<g fill="#1a1a2e"><rect x="132" y="208" width="58" height="40" rx="15"/><rect x="210" y="208" width="58" height="40" rx="15"/></g><path d="M190 220Q200 212 210 220" fill="none" stroke="#1a1a2e" stroke-width="6"/><path d="M144 219H162M222 219H240" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".6"/>';
+            return '<g fill="#1a1a2e"><rect x="130" y="170" width="60" height="40" rx="15"/><rect x="210" y="170" width="60" height="40" rx="15"/></g><path d="M190 182Q200 174 210 182" fill="none" stroke="#1a1a2e" stroke-width="6"/><path d="M142 181H160M222 181H240" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".6"/>';
         }
         if (id == 3) {
-            return '<path d="M143 148L148 94L174 122L200 84L226 122L252 94L257 148Z" fill="#ffd23f" stroke="#b8860b" stroke-width="4" stroke-linejoin="round"/><circle cx="200" cy="124" r="8" fill="#e63946"/><circle cx="164" cy="134" r="5" fill="#4cc9f0"/><circle cx="236" cy="134" r="5" fill="#4cc9f0"/>';
+            return '<path d="M146 116L150 62L175 88L200 50L225 88L250 62L254 116Z" fill="#ffd23f" stroke="#b8860b" stroke-width="4" stroke-linejoin="round"/><circle cx="200" cy="94" r="8" fill="#e63946"/><circle cx="166" cy="104" r="5" fill="#4cc9f0"/><circle cx="234" cy="104" r="5" fill="#4cc9f0"/>';
         }
         if (id == 4) {
-            return '<g fill="#e63946" stroke="#9d0208" stroke-width="4" stroke-linejoin="round"><path d="M240 306L264 362L236 364L224 312Z"/><path d="M96 280Q200 318 304 280L308 304Q200 344 92 304Z"/></g><path d="M120 296Q200 322 280 296" fill="none" stroke="#fff" stroke-width="4" stroke-dasharray="10 12" opacity=".7"/>';
+            return '<g fill="#e63946" stroke="#9d0208" stroke-width="4" stroke-linejoin="round"><path d="M236 282L258 334L232 338L222 288Z"/><path d="M120 262Q200 292 280 262L284 284Q200 316 116 284Z"/></g><path d="M140 276Q200 298 260 276" fill="none" stroke="#fff" stroke-width="4" stroke-dasharray="10 12" opacity=".7"/>';
         }
         return "";
     }
 
     function wings() external pure returns (string memory) {
-        return '<g fill="#fff" stroke="#c9c3e6" stroke-width="4"><path d="M112 232C40 168 14 232 48 262C18 284 62 324 112 292Z"><animateTransform attributeName="transform" type="rotate" values="0 112 260;-10 112 260;0 112 260" dur="1.2s" repeatCount="indefinite"/></path><path d="M288 232C360 168 386 232 352 262C382 284 338 324 288 292Z"><animateTransform attributeName="transform" type="rotate" values="0 288 260;10 288 260;0 288 260" dur="1.2s" repeatCount="indefinite"/></path></g>';
+        return '<g fill="#fff" stroke="#c9c3e6" stroke-width="4"><path d="M132 290C60 236 34 296 66 322C38 344 82 380 132 350Z"><animateTransform attributeName="transform" type="rotate" values="0 132 320;-10 132 320;0 132 320" dur="1.2s" repeatCount="indefinite"/></path><path d="M268 290C340 236 366 296 334 322C362 344 318 380 268 350Z"><animateTransform attributeName="transform" type="rotate" values="0 268 320;10 268 320;0 268 320" dur="1.2s" repeatCount="indefinite"/></path></g>';
     }
 
     // ------------------------------------------------------------------ Hintergrund

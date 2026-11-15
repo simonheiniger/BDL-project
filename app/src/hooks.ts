@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAccount, useBlockNumber, useChainId, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, useBlockNumber, useChainId, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { BaseError, type Abi, type Address, type PublicClient } from "viem";
 import { useContracts, accountAbi, type Contracts, type Pet } from "./contracts";
 
@@ -145,6 +145,9 @@ export function useInventory(account: Address | undefined) {
 /** Transaktion senden + auf Receipt warten + UI-Status (pending/Fehler) */
 export function useTx() {
   const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
+  const { chainId: walletChain } = useAccount();
+  const appChain = useChainId();
   const pc = usePublicClient();
   const qc = useQueryClient();
   const [pending, setPending] = useState<string | null>(null);
@@ -156,7 +159,14 @@ export function useTx() {
     setError(null);
     setPending(label);
     try {
-      const hash = await writeContractAsync(req as Parameters<typeof writeContractAsync>[0]);
+      // Sicherheit: Wallet muss auf derselben Chain sein, von der die App liest.
+      // Sonst wuerde die Tx z.B. im Ethereum-Mainnet landen (echtes Geld, Contract existiert dort nicht).
+      if (walletChain !== appChain) {
+        setPending("Netzwerk in der Wallet wechseln");
+        await switchChainAsync({ chainId: appChain });
+        setPending(label);
+      }
+      const hash = await writeContractAsync({ ...req, chainId: appChain } as Parameters<typeof writeContractAsync>[0]);
       const rc = await pc!.waitForTransactionReceipt({ hash });
       if (rc.status !== "success") throw new Error("Transaktion revertiert");
       await qc.invalidateQueries();

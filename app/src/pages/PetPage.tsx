@@ -4,7 +4,8 @@ import { useAccount } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 import { ACTIONS, ITEM_EMOJI, STAT_NAMES, ZERO, accountAbi, useContracts, zoneString } from "../contracts";
 import { useChainQuery, useInventory, usePet, useShopItems, useTx } from "../hooks";
-import { NftCard, StatBars, Traits, TxStatus, XpBar, short } from "../components/common";
+import { NftCard, StatBars, Traits, TxStatus, XpBar, petInput, short } from "../components/common";
+import PetCanvas from "../three/PetCanvas";
 
 export default function PetPage() {
   const { id: idParam } = useParams();
@@ -55,7 +56,7 @@ export default function PetPage() {
     <>
       <TxStatus {...tx} />
       <section className="pethero">
-        <NftCard view={view} size="lg" awake={awake} link={false} />
+        <NftCard view={view} size="lg" link={false} art={<PetCanvas input={petInput(view)} awake={awake} />} />
         <div className="grow card">
           {search.has("nfc") && <div className="badge nfc">📡 NFC-Haus gescannt – Pet aufgeweckt!</div>}
           <div className="muted small">
@@ -64,6 +65,12 @@ export default function PetPage() {
           <XpBar pet={pet} />
           <StatBars stats={pet.stats} />
           <h4>Traits (on-chain aus DNA)</h4>
+          <p className="muted small">
+            3D-Modell wird im Browser aus der DNA gebaut ·{" "}
+            <a href={view.image} target="_blank" rel="noreferrer">
+              on-chain NFT-Bild (SVG)
+            </a>
+          </p>
           <Traits view={view} />
         </div>
       </section>

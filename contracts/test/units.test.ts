@@ -154,6 +154,54 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
     expect(["Common", "Rare", "Epic", "Legendary"]).to.include(attr.Seltenheit);
   });
 
+  it("Spezies-Zuordnung: 15 Arten, identisch zur App (dna.ts SPECIES_CUM)", async () => {
+    const { renderer } = await loadFixture(fast);
+    const CUM = [9, 18, 27, 35, 42, 46, 51, 57, 62, 67, 75, 82, 88, 94, 100];
+    for (let r = 0; r < 100; r++) {
+      expect(await renderer.speciesOf(r)).to.equal(BigInt(CUM.findIndex((c) => r < c)));
+    }
+  });
+
+  it("Alle 15 Arten (auch Mischlinge) erzeugen wohlgeformtes SVG", async () => {
+    const { renderer } = await loadFixture(fast);
+    const SP = [0, 9, 18, 27, 35, 42, 46, 51, 57, 62, 67, 75, 82, 88, 94];
+    const base = { stats: [10, 10, 10, 10], focus: [0, 0, 0, 0], level: 8, xp: 0, lastAction: 0, dayStart: 0, actionsToday: 0, fusionCount: 0, generation: 1, equipped: 0 };
+    for (let i = 0; i < 15; i++) {
+      const j = (i + 7) % 15; // fremde Ohren/Schwanz -> Mischling
+      for (const [ears, tail] of [[i, i], [j, j]]) {
+        const dna = (BigInt(SP[i]) << 16n) | (BigInt(SP[ears]) << 32n) | (BigInt(SP[tail]) << 112n);
+        const svg = await renderer.svg({ ...base, dna }, 0);
+        expect(svg.startsWith("<svg") && svg.endsWith("</svg>")).to.equal(true);
+        expect(svg).to.not.include('""'); // kaputte Attribute
+        expect((svg.match(/<g[ >]/g) ?? []).length).to.equal((svg.match(/<\/g>/g) ?? []).length);
+      }
+    }
+  });
+
+  it("Upgrade: neuer Renderer per setRenderer, Pets/DNA bleiben unveraendert", async () => {
+    const { pets, alice } = await loadFixture(fast);
+    const { id } = await mintPet(pets, alice);
+    const dnaBefore = (await pets.getPet(id)).dna;
+    const decor = await ethers.deployContract("PetDecor");
+    const anatomy = await ethers.deployContract("PetAnatomy");
+    const r2 = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
+    await pets.setRenderer(await r2.getAddress());
+    expect((await pets.getPet(id)).dna).to.equal(dnaBefore);
+    expect(decodeUri(await pets.tokenURI(id)).name).to.match(/#1$/);
+  });
+
+  it("Mint ist reinrassig: Ohren- und Schwanz-Gen = Spezies-Gen", async () => {
+    const { pets, alice } = await loadFixture(fast);
+    for (let i = 0; i < 5; i++) {
+      const { id } = await mintPet(pets, alice);
+      const dna = (await pets.getPet(id)).dna;
+      const g = (k: bigint) => (dna >> (16n * k)) & 0xffffn;
+      expect(g(2n)).to.equal(g(1n));
+      expect(g(7n)).to.equal(g(1n));
+      expect(attrs(decodeUri(await pets.tokenURI(id))).Rasse).to.equal("Reinrassig");
+    }
+  });
+
   it("Evolution: Baby ab Lv 2, Erwachsen ab Lv 5", async () => {
     const { pets, alice } = await loadFixture(fast);
     const { id } = await mintPet(pets, alice);
@@ -359,15 +407,15 @@ describe("Fusion 2 -> 1", () => {
     expect(pk.fusionCount).to.equal(1n);
     expect(pk.generation).to.equal(2n);
     // Gen-Vererbung: jedes 16-Bit-Gen stammt von A, B oder ist eine Mutation; Bits ueber den Genen bleiben von A
-    const mask = (1n << 112n) - 1n;
-    expect(pk.dna >> 112n).to.equal(pa.dna >> 112n);
+    const mask = (1n << 128n) - 1n;
+    expect(pk.dna >> 128n).to.equal(pa.dna >> 128n);
     let fromA = 0, fromB = 0;
-    for (let i = 0n; i < 7n; i++) {
+    for (let i = 0n; i < 8n; i++) {
       const g = (x: bigint) => (x >> (16n * i)) & 0xffffn;
       if (g(pk.dna) === g(pa.dna)) fromA++;
       else if (g(pk.dna) === g(pb.dna)) fromB++;
     }
-    expect(fromA + fromB).to.be.gte(4); // max. wenige Mutationen
+    expect(fromA + fromB).to.be.gte(5); // max. wenige Mutationen
     expect(pk.dna & mask).to.not.equal(0n);
     expect(await pets.exists(b.id)).to.equal(false);
     await expect(pets.ownerOf(b.id)).to.be.revertedWithCustomError(pets, "ERC721NonexistentToken");

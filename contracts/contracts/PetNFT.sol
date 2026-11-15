@@ -37,7 +37,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
     uint256 public constant XP_PER_ACTION = 20;
     uint256 public constant MAX_ITEM_ID = 32; // Cosmetics-IDs 1..32 (fuer Inventar-Migration)
-    uint256 public constant GENE_SLOTS = 7; // Anzahl 16-Bit-Gene in der DNA (siehe PetRenderer)
+    uint256 public constant GENE_SLOTS = 8; // Anzahl 16-Bit-Gene in der DNA (siehe PetRenderer)
     uint256 public constant MUTATION_RATE = 16; // 1/16 Chance pro Gen, bei Fusion neu zu wuerfeln
 
     IERC6551Registry public immutable registry;
@@ -113,7 +113,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         }
         p.level = 1;
         p.generation = 1;
-        p.dna = uint256(keccak256(abi.encode(seed, "dna")));
+        // Reinrassig: Ohren- (Slot 2) und Schwanz-Gen (Slot 7) = Spezies-Gen (Slot 1).
+        // Mischlinge entstehen erst durch Fusion (slotweise Vererbung).
+        uint256 dna = uint256(keccak256(abi.encode(seed, "dna")));
+        uint256 sp = (dna >> 16) & 0xffff;
+        dna &= ~((uint256(0xffff) << 32) | (uint256(0xffff) << 112));
+        p.dna = dna | (sp << 32) | (sp << 112);
 
         _safeMint(msg.sender, petId);
         address acc = registry.createAccount(accountImpl, bytes32(0), block.chainid, address(this), petId);

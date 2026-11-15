@@ -42,7 +42,8 @@ async function main() {
     maxPerDay,
   ]);
   const decor = await deploy("PetDecor");
-  const renderer = await deploy("PetRenderer", [await decor.getAddress()]);
+  const anatomy = await deploy("PetAnatomy");
+  const renderer = await deploy("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
   const cosmetics = await deploy("Cosmetics", ["https://bld-pets.local/cosmetics/{id}.json"]);
   const trophy = await deploy("Trophy");
   const arena = await deploy("Arena", [await pets.getAddress(), await trophy.getAddress(), checkinSigner]);

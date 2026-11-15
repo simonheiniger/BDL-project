@@ -470,3 +470,45 @@ tr.winner {
 .nft.sm .nft-info .row.small .muted {
   display: none;
 }
+
+/* ------------------------------------------------------------ 3D */
+.pet3d {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: grab;
+}
+.pet3d canvas {
+  display: block;
+}
+.gal3d {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.gal3d figure {
+  margin: 0;
+  text-align: center;
+}
+.gal3d img,
+.gal3d .ph {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  display: block;
+  background: var(--card);
+}
+.gal3d figcaption {
+  font-size: 0.85em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.elem {
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  margin-left: 4px;
+}

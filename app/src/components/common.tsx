@@ -1,8 +1,39 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { snapshot } from "../three/scene";
+import { ITEM_IDS, decode } from "../three/dna";
+import { ELEMENTS } from "../three/creature";
+
+const ELEMENT_ICON = ["⭐", "🪨", "🔥", "🌿", "🔮", "❄️", "💧", "🌋", "🌌", "⚡"];
+/** Element-Typ (aus dem Farb-Gen abgeleitet, wie im 3D-Generator) */
+export const elementOf = (v: PetView) => {
+  const i = decode(BigInt(v.pet.dna), Number(v.pet.level)).palette;
+  return `${ELEMENT_ICON[i]} ${ELEMENTS[i]}`;
+};
 import { Link } from "react-router-dom";
 import { STAT_NAMES, type Pet } from "../contracts";
 import { xpToNext, MAX_LEVEL } from "../gamemath";
 import type { PetView } from "../hooks";
+
+/** 3D-Eingabe aus on-chain Daten (Cosmetic nur, wenn es laut tokenURI sichtbar ist) */
+export const petInput = (v: PetView) => ({
+  dna: BigInt(v.pet.dna),
+  level: Number(v.pet.level),
+  generation: Number(v.pet.generation),
+  item: ITEM_IDS[String(v.attrs.Cosmetic)] ?? 0,
+});
+
+/** Low-Poly-Snapshot (lazy, nach dem ersten Paint); faellt auf das on-chain SVG zurueck */
+function usePetImage(v: PetView) {
+  const [img, setImg] = useState<string | null>(null);
+  const input = petInput(v);
+  const key = `${input.dna}-${input.level}-${input.generation}-${input.item}`;
+  useEffect(() => {
+    const id = setTimeout(() => setImg(snapshot(input, 480)), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return img ?? v.image;
+}
 
 const tierClass = (v: PetView) => `tier-${String(v.attrs.Seltenheit ?? "Common").toLowerCase()}`;
 
@@ -15,8 +46,11 @@ export function NftCard({
   size = "md",
   awake = false,
   link = true,
+  art,
   children,
 }: {
+  /** ersetzt das Bild, z.B. durch die Live-3D-Ansicht */
+  art?: React.ReactNode;
   view: PetView;
   size?: "sm" | "md" | "lg";
   awake?: boolean;
@@ -24,10 +58,11 @@ export function NftCard({
   children?: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const img = usePetImage(view);
 
   function onMove(e: React.PointerEvent) {
     const el = ref.current;
-    if (!el) return;
+    if (!el || art) return; // bei Live-3D dreht man das Modell, nicht die Karte
     const r = el.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
@@ -43,16 +78,16 @@ export function NftCard({
 
   const body = (
     <div ref={ref} className={`nft ${size} ${tierClass(view)}`} onPointerMove={onMove} onPointerLeave={onLeave}>
-      <div className={`art ${awake ? "awake" : ""}`}>
-        <img src={view.image} alt={view.name} />
-      </div>
+      <div className={`art ${awake ? "awake" : ""}`}>{art ?? <img src={img} alt={view.name} />}</div>
       <div className="nft-info">
         <div className="row between">
           <strong className="nft-name">{view.name}</strong>
           <span className="lv">Lv {Number(view.pet.level)}</span>
         </div>
         <div className="row between small">
-          <span className="tier-label">{String(view.attrs.Seltenheit)}</span>
+          <span className="tier-label">
+            {String(view.attrs.Seltenheit)} <span className="elem">{elementOf(view)}</span>
+          </span>
           <span className="muted">
             {String(view.attrs.Stufe)} · Gen {Number(view.pet.generation)}
           </span>
@@ -71,11 +106,15 @@ export function NftCard({
   );
 }
 
-const TRAIT_KEYS = ["Farbe", "Form", "Kopf", "Augen", "Mund", "Muster", "Hintergrund", "Cosmetic"];
+const TRAIT_KEYS = ["Spezies", "Rasse", "Ohren", "Schwanz", "Farbe", "Augen", "Mund", "Muster", "Hintergrund", "Cosmetic"];
 
 export function Traits({ view }: { view: PetView }) {
   return (
     <div className="traits">
+      <div className="trait">
+        <span className="muted small">Typ</span>
+        <span>{elementOf(view)}</span>
+      </div>
       {TRAIT_KEYS.map((k) => (
         <div key={k} className="trait">
           <span className="muted small">{k}</span>

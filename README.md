@@ -11,7 +11,7 @@ Jedes Pet ist ein ERC-721-NFT mit **eigener Wallet (ERC-6551 Token Bound Account
 | Ordner | Inhalt |
 |---|---|
 | `contracts/` | Solidity (Hardhat 2, OZ 5.0.2): Registry, PetAccount, PetNFT, PetRenderer/PetDecor (on-chain SVG), GameMath, Cosmetics, Trophy, Arena, Marketplace + Tests + Scripts |
-| `app/` | PWA (Vite, React, wagmi/viem) |
+| `app/` | PWA (Vite, React, wagmi/viem, Three.js: Low-Poly-3D-Tiere prozedural aus der DNA, Galerie unter `/galerie`) |
 | `checkin/` | Check-in-Service: prüft Standort (Geohash), signiert EIP-712 |
 | `sim/` | Balance-Simulation (XP-Kurve, Gewinnchancen, Fusion, Supply) |
 | `hardware/` | Parametrisches NFC-Haus (OpenSCAD) |

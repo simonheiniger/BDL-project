@@ -107,34 +107,61 @@ Kettenfusion (Stat 40 + 40): Bonus +12, +6, +4, +3, +2 … → **Diminishing Ret
 aber trotzdem: Pro Spieler und Turnier startet nur ein Pet, und die Stats steigen. In der Supply-Simulation (500 Mints/Woche)
 erreicht die Burn-Rate nach einem Jahr ~58 % der Mint-Rate.
 
-### 1.5 Aussehen: DNA, Seltenheit, Evolution
+### 1.5 Aussehen: Spezies, DNA, Breeding
 
-Jedes Pet bekommt beim Mint eine **DNA** (`uint256`). Die unteren 112 Bit sind 7 Gene à 16 Bit; daraus erzeugt
-`PetRenderer` Bild und Traits **komplett on-chain** (SVG, kein IPFS, kein Server).
+Jedes Pet ist ein Tier im Chibi-Stil (grosser Kopf, Körper, Pfoten, Schwanz). Beim Mint bekommt es eine **DNA**
+(`uint256`); die unteren 128 Bit sind 8 Gene à 16 Bit. Daraus erzeugen `PetRenderer`, `PetAnatomy` und `PetDecor`
+Bild und Traits **komplett on-chain** (SVG, kein IPFS, kein Server).
 
-| Gen | Varianten (Wahrscheinlichkeit) |
-|---|---|
-| Farbe | 6 gewöhnliche (80 %), Lagune/Lava (12 %), Galaxie (6 %), Gold (2 %) |
-| Form | Mochi, Tropfen, Bohne, Birne (je 25 %) |
-| Kopf | Keiner, Katzenohren, Hasenohren, Antennen, Spross, Hörner (10 %), Heiligenschein (5 %) |
-| Augen | Kuller, Schläfrig, Zwinkernd, Funkelnd, Herz (12 %), Sterne (8 %) |
-| Mund / Muster / Hintergrund | 4 / 5 / 6 Varianten |
+| Slot | Gen | Varianten (Wahrscheinlichkeit) |
+|---|---|---|
+| 1 | Spezies (Kopf, Körper, Schnauze) | 15 Arten: Katze, Fuchs, Hase je 9 % · Bär, Pinguin je 8 % · Frosch, Eule je 7 % · Elefant, Schildkröte, Löwe, Wolf je 6 % · **Giraffe, Nashorn, Krokodil je 5 %** · **Drache 4 %** |
+| 2 | Ohren | wie Spezies (beim Mint identisch mit Slot 1) |
+| 7 | Schwanz | wie Spezies (beim Mint identisch mit Slot 1) |
+| 0 | Farbe | 6 gewöhnliche (80 %), Lagune/Lava (12 %), Galaxie (6 %), Gold (2 %) |
+| 3 | Augen | Kuller, Schläfrig, Zwinkernd, Funkelnd, Herz (12 %), Sterne (8 %) |
+| 4–6 | Mund / Muster / Hintergrund | 4 / 5 / 6 Varianten |
 
-**Seltenheit** = Summe der Trait-Punkte (Gold 6, Galaxie 4, Lagune/Lava 2, Sterne 2, Herz 1, Heiligenschein 3,
-Hörner 1, Herz-Muster 1) → Common (< 2) / Rare (≥ 2) / Epic (≥ 4) / Legendary (≥ 6).
-Gemessen über 1 000 Pets (`N=1000 npx hardhat run scripts/gallery.ts`): **67 % / 20 % / 10 % / 4 %**.
-Die Seltenheit ist im Bild selbst sichtbar (farbiger Rahmen + Badge), also auf jedem NFT-Marktplatz.
+**Breeding (Fusion):** Jedes Gen kommt zufällig von einem Elternteil, mit 1/16 Chance pro Gen auf eine Mutation.
+Weil Ohren und Schwanz eigene Gene sind, entstehen **Mischlinge** (z.B. Katze mit Fuchsschwanz, Frosch mit
+Drachenhörnern). Gemintete Pets sind immer reinrassig → Mischlinge gibt es **nur durch Fusion**. Das macht die
+Fusion nicht nur wegen der Stats interessant, sondern auch für Sammler.
 
-**Evolution** nach Level: Ei (Lv 1) → Baby (2–4) → Erwachsen (5–14, Kopf-Trait erscheint) → Legendär (15+, Aura).
-Pflege verändert damit sichtbar das NFT – das Bild ist ein Abbild des on-chain Zustands.
+**Seltenheit** = Summe der Trait-Punkte (Gold 6, Galaxie 4, Lagune/Lava 2, Drache 3, Giraffe/Nashorn/Krokodil 2,
+Frosch/Elefant/Löwe/Wolf 1, Sterne 2, Herz 1, Herz-Muster 1, je +1 für fremde Ohren / fremden Schwanz)
+→ Common (< 2) / Rare (≥ 2) / Epic (≥ 4) / Legendary (≥ 6).
+Beim Mint gemessen über 1 000 Pets: **56 % / 29 % / 10 % / 5 %**. Die Seltenheit ist im Bild sichtbar (Rahmen + Badge).
 
-**Fusion vererbt Gene:** Jedes Gen kommt zufällig von einem Elternteil, mit 1/16 Chance pro Gen auf eine Mutation
-(neu gewürfelt) → Fusion kann einen selteneren Look erzeugen. Fusionierte Pets tragen ein Juwel auf der Stirn.
+**Erweiterung ohne Migration:** Die zusätzlichen Arten (von 6 auf 15) wurden nachträglich ergänzt, indem nur ein neuer Renderer deployt und
+per `PetNFT.setRenderer()` aktiviert wurde (`scripts/upgrade-renderer.ts`). DNA, Stats, Besitz und Inventar bleiben
+unverändert; das Aussehen bestehender Pets wird aus derselben DNA neu abgeleitet (Arten können sich dadurch ändern).
+
+**Evolution** nach Level: Ei (Lv 1) → Baby (2–4) → Erwachsen (5–14) → Legendär (15+, Aura).
 
 **Cosmetics im Bild:** `equip(petId, itemId)` speichert das getragene Item on-chain. `tokenURI` prüft bei jedem Aufruf,
 ob das Item noch in der Pet-Wallet liegt – wird es verkauft oder verschoben, verschwindet es aus dem Bild.
 
-Galerie aller Varianten: `docs/gallery/index.html`.
+**Zwei Darstellungen, eine Quelle:**
+
+| | on-chain SVG (`PetRenderer`) | Low-Poly-3D (App, Three.js) |
+|---|---|---|
+| Zweck | offizielles NFT-Bild, Marktplätze, Fallback | Spielerlebnis in der App |
+| Erzeugung | Solidity, bei jedem `tokenURI`-Aufruf | Browser (`app/src/three/`), prozedural |
+| Input | DNA, Level, Generation, sichtbares Cosmetic | dieselben on-chain Werte |
+
+**Stil:** Monster-Sammel-Look – glatte Formen mit Toon-Shading (3 harte Lichtstufen), dunkle Konturlinien
+(Inverted Hull), Chibi-Proportionen (grosser Kopf, Stummelbeine), Anime-Augen als Texturen. Jedes Tier hat einen
+**Element-Typ**, abgeleitet aus dem Farb-Gen: Normal (Fellkragen), Gestein (Felsplatten), Feuer/Magma (Flammenschwanz),
+Pflanze (Blattspross), Psycho (Stirnjuwel + Orb), Eis (Kristalle), Wasser (Flossen), Kosmos (Sternenring),
+Elektro (Blitzschwanz). Der Typ ist bisher nur in der App sichtbar (nicht in den on-chain Attributen).
+
+Der 3D-Generator decodiert die DNA mit denselben Gewichten wie der Contract (`app/src/three/dna.ts` ↔ `PetRenderer.look`).
+Jede Spezies hat eigene Proportionen und Merkmale (Ohren, Schnauze, Schwanz); Ohren und Schwanz kommen aus ihren
+eigenen Genen → Mischlinge sind auch in 3D sichtbar. Fellmuster (Bauch, Flecken, Streifen, Brustfleck) sind
+Vertex-Farben; das Hintergrund-Gen wählt Himmel und Arena.
+Gleiche DNA → exakt gleiches Tier, bei jedem Spieler.
+
+Galerien: on-chain SVG `docs/gallery/index.html`, 3D in der App unter `/galerie`.
 
 ## 2. Smart-Contract-Architektur
 
@@ -155,7 +182,7 @@ Galerie aller Varianten: `docs/gallery/index.html`.
 | `ERC6551Registry` | EIP-6551-Registry (lesbare Solidity-Variante). Account-Adresse = CREATE2(salt, Proxy-Bytecode + Footer). Eigene Instanz, weil das Kurs-Netz keine kanonische Registry hat. |
 | `PetAccount` | Account-Implementation. Liest seine NFT-Bindung aus dem Proxy-Footer (`extcodecopy`). `owner()` = Owner des NFTs. `execute()` nur Owner, erhöht `state`. `approve`/`setApprovalForAll` gesperrt. `sweepTo()` nur für PetNFT. |
 | `PetNFT` | Mint (legt TBA an, würfelt DNA), Pflege-Loop, Fusion inkl. Gen-Mischung, `equip()`. `tokenURI` delegiert an den Renderer. Verhindert Transfer eines Pets in die eigene Wallet. |
-| `PetRenderer` / `PetDecor` | Erzeugen SVG + Metadaten aus DNA, Level, Generation und getragenem Cosmetic. Zwei Contracts wegen 24-KB-Limit (EIP-170). |
+| `PetRenderer` / `PetAnatomy` / `PetDecor` | Erzeugen SVG + Metadaten aus DNA, Level, Generation und getragenem Cosmetic. Drei Contracts wegen 24-KB-Limit (EIP-170). |
 | `Cosmetics` | ERC-1155 mit Shop (`buy(id, amount, to)` → direkt ins TBA), Max-Supply pro Item. |
 | `Trophy` | Soulbound: `_update` revertiert ausser beim Mint (nur Arena) und bei Fusion-Migration (nur PetNFT). |
 | `Arena` | Turniere: Check-in-Signatur prüfen, Stats-Snapshot beim Join, Commit-Reveal, Trophy-Mint, Preisgeld-Split. |

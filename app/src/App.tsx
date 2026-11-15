@@ -8,6 +8,7 @@ import PetPage from "./pages/PetPage";
 import Fusion from "./pages/Fusion";
 import Market from "./pages/Market";
 import Arena from "./pages/Arena";
+import Gallery3D from "./pages/Gallery3D";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -52,7 +53,20 @@ function Wallet() {
 function ChainGuard() {
   const chainId = useChainId();
   const contracts = useContracts();
+  const { chainId: walletChain, isConnected } = useAccount();
   const { switchChain } = useSwitchChain();
+  const appChain = config.chains.find((c) => c.id === chainId);
+  if (isConnected && walletChain !== chainId) {
+    return (
+      <div className="card warn">
+        ⚠️ Deine Wallet ist auf einem anderen Netzwerk (Chain {walletChain}) als die App ({appChain?.name ?? chainId}).
+        Transaktionen würden dort landen.{" "}
+        <button className="btn small" onClick={() => switchChain({ chainId })}>
+          Zu {appChain?.name ?? chainId} wechseln
+        </button>
+      </div>
+    );
+  }
   if (contracts) return null;
   return (
     <div className="card warn">
@@ -82,6 +96,7 @@ export default function App() {
         <NavLink to="/fusion">Fusion</NavLink>
         <NavLink to="/market">Markt</NavLink>
         <NavLink to="/arena">Arena</NavLink>
+        <NavLink to="/galerie">Galerie</NavLink>
       </nav>
       <main>
         <ChainGuard />
@@ -91,6 +106,7 @@ export default function App() {
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />
+          <Route path="/galerie" element={<Gallery3D />} />
         </Routes>
       </main>
     </div>

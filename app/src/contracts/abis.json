@@ -1593,10 +1593,28 @@
           "internalType": "contract PetDecor",
           "name": "decor_",
           "type": "address"
+        },
+        {
+          "internalType": "contract PetAnatomy",
+          "name": "anatomy_",
+          "type": "address"
         }
       ],
       "stateMutability": "nonpayable",
       "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "anatomy",
+      "outputs": [
+        {
+          "internalType": "contract PetAnatomy",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
     },
     {
       "inputs": [],
@@ -1635,12 +1653,17 @@
             },
             {
               "internalType": "uint8",
-              "name": "shape",
+              "name": "species",
               "type": "uint8"
             },
             {
               "internalType": "uint8",
-              "name": "head",
+              "name": "ears",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "tail",
               "type": "uint8"
             },
             {
@@ -1677,6 +1700,25 @@
           "internalType": "struct PetRenderer.Look",
           "name": "l",
           "type": "tuple"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "g",
+          "type": "uint256"
+        }
+      ],
+      "name": "speciesOf",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
         }
       ],
       "stateMutability": "pure",

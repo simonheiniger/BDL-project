@@ -80,9 +80,11 @@ export default function Fusion() {
             Vererbung: Stat = max + 30% × min / (1 + bisherige Fusionen) · XP = XP₁ + 50% × XP₂
           </p>
           <p className="small">
-            🧬 Aussehen: Jedes der 7 Gene (Farbe, Form, Kopf, Augen, Mund, Muster, Hintergrund) kommt zufällig von einem
-            der beiden Eltern – mit 1/16 Chance pro Gen auf eine <strong>Mutation</strong>. Mit Glück entsteht ein
-            seltenerer Look. Das Fusions-Juwel zeigt, dass das Pet aus einer Fusion stammt.
+            🧬 Breeding: Jedes der 8 Gene (Spezies, Ohren, Schwanz, Farbe, Augen, Mund, Muster, Hintergrund) kommt
+            zufällig von einem der beiden Eltern – mit 1/16 Chance pro Gen auf eine <strong>Mutation</strong>. Erbt das
+            Pet Ohren oder Schwanz von einer anderen Spezies, wird es ein <strong>Mischling</strong> (z.B. Katze mit
+            Fuchsschwanz) – Mischlinge gibt es nur durch Fusion und sie sind seltener. Das Juwel auf der Stirn zeigt die
+            Fusion an.
           </p>
           {burnInv && (
             <p className="small">

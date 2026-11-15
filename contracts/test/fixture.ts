@@ -19,7 +19,8 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
     maxPerDay,
   ]);
   const decor = await ethers.deployContract("PetDecor");
-  const renderer = await ethers.deployContract("PetRenderer", [await decor.getAddress()]);
+  const anatomy = await ethers.deployContract("PetAnatomy");
+  const renderer = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
   await pets.setRenderer(await renderer.getAddress());
   const cosmetics = await ethers.deployContract("Cosmetics", ["ipfs://cosmetics/{id}.json"]);
   const trophy = await ethers.deployContract("Trophy");

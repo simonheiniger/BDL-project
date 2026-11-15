@@ -27,7 +27,12 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Frage | Antwort |
 |---|---|
 | Warum Bild on-chain statt IPFS? | Kein externer Dienst, der ausfallen kann; das Bild hängt live am Zustand (Level, Cosmetic). Bei IPFS müsste man bei jedem Level-Up neue Metadaten hochladen und einem Server vertrauen. |
-| Warum zwei Render-Contracts? | Ein Contract darf max. 24 KB Code haben (EIP-170). Renderer ~20 KB + Decor ~7 KB. |
+| Warum drei Render-Contracts? | Ein Contract darf max. 24 KB Code haben (EIP-170). Renderer ~18 KB, Anatomy ~6 KB, Decor ~7 KB. |
+| Warum 3D nicht on-chain? | Ein 3D-Generator in Solidity wäre zu gross und zu teuer. On-chain liegt die **DNA** (die Wahrheit); der Browser rendert sie deterministisch. Das SVG bleibt als on-chain Bild für Marktplätze. Next step: Generator-Bundle auf IPFS und per `animation_url` in den Metadaten verlinken → Marktplätze zeigen das 3D-Modell. |
+| Warum prozedural statt fertiger 3D-Modelle? | Fertige Modelle können keine Mischlinge, Evolution oder Gen-Vererbung zeigen. Prozedural entsteht jedes Tier aus der DNA. |
+| Warum Snapshots auf den Karten? | Browser erlauben nur ~16 WebGL-Kontexte gleichzeitig. Ein geteilter Renderer erzeugt Standbilder, nur die Detailseite läuft live. |
+| Warum eigene Gene für Ohren und Schwanz? | Damit Breeding sichtbar wird: Mischlinge entstehen nur durch Fusion → zusätzlicher Anreiz zu fusionieren, ohne Pay-to-Win. |
+| Wie kamen 8 neue Arten dazu, ohne Pets neu zu minten? | Neuer Renderer + `setRenderer()`. Die DNA bleibt; nur die Interpretation der Gene ändert sich. Gleichzeitig der Nachteil: Bestehende Pets können dadurch eine andere Art bekommen → in Produktion Art-Zuordnung einfrieren oder versionieren. |
 | Warum ist der Renderer austauschbar? | Kunst soll sich weiterentwickeln können. Trade-off: Owner kann das Aussehen ändern – aber nie Stats, Level oder Besitz. Strengere Variante: `setRenderer` nach Launch sperren. |
 | Ist die DNA manipulierbar? | Sie stammt aus `blockhash`/`prevrandao` beim Mint – ein Validator könnte theoretisch auf seltene DNA zielen. Akzeptiert, weil Aussehen keinen Einfluss auf Turniere hat. |
 | Warum prüft `tokenURI` den Item-Bestand live? | Sonst könnte man ein Item anziehen, verkaufen und es wäre trotzdem im Bild sichtbar. |
