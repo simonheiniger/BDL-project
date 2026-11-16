@@ -142,6 +142,20 @@ export function useInventory(account: Address | undefined) {
   );
 }
 
+/** Bekannte Wallet-Probleme in verstaendliche Anleitungen uebersetzen */
+function friendlyError(e: unknown): string {
+  const raw = e instanceof BaseError ? `${e.shortMessage} ${e.details ?? ""}` : (e as Error).message;
+  if (/nonce too high/i.test(raw)) {
+    return (
+      "MetaMask kennt alte Transaktionen dieses Accounts, die das Testnetz (nach einem Neustart) nicht mehr hat. " +
+      "Lösung: MetaMask → Einstellungen → Erweitert → „Aktivitäts-Tab-Daten löschen“, dann nochmal versuchen."
+    );
+  }
+  if (/insufficient funds/i.test(raw)) return "Zu wenig TEST-ETH auf diesem Account.";
+  if (/user rejected|denied/i.test(raw)) return "In MetaMask abgebrochen.";
+  return e instanceof BaseError ? e.shortMessage : (e as Error).message;
+}
+
 /** Transaktion senden + auf Receipt warten + UI-Status (pending/Fehler) */
 export function useTx() {
   const { writeContractAsync } = useWriteContract();
@@ -172,7 +186,7 @@ export function useTx() {
       await qc.invalidateQueries();
       return rc;
     } catch (e) {
-      setError(e instanceof BaseError ? e.shortMessage : (e as Error).message);
+      setError(friendlyError(e));
       return null;
     } finally {
       setPending(null);
