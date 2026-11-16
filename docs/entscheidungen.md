@@ -67,6 +67,15 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Warum Fusion über XP statt Level? | Simulation zeigte Exploit der ersten Version (−11 % Vernichtung = Wertschöpfung bei Lv20+Lv5). Siehe `docs/konzept.md` §1.4. |
 | Warum Diminishing Returns bei Stats? | Kettenfusion würde sonst unbegrenzt starke Pets erzeugen; Turniere würden deterministisch. |
 
+## Öffentlicher Betrieb (Vercel)
+
+| Frage | Antwort |
+|---|---|
+| Warum ein RPC-Proxy? | Vercel liefert über https, die Kurs-RPC spricht nur http → der Browser blockiert direkte Lesezugriffe (Mixed Content). Die Function leitet serverseitig weiter. |
+| Ist der Proxy ein Risiko fürs Kurs-Netz? | Er lässt nur Lese-Methoden durch (Whitelist, max. 50 Calls pro Batch, 64 KB). Transaktionen laufen über MetaMask direkt zur RPC, nicht über uns. |
+| Warum ein eigener Check-in-Key? | Der Key liegt auf einem Server (Vercel-Env). Wird er geleakt, kann man nur Check-ins fälschen – mit dem Deploy-Key könnte man den Renderer tauschen oder Einnahmen abziehen. Least Privilege. |
+| Warum kein Ersatz-Standort mehr? | Lokal (http) gibt es kein GPS, darum der ZHAW-Fallback. Öffentlich wäre der Fallback ein Freifahrtschein durch den Geofence – dort ist der echte Standort Pflicht. |
+
 ## Geofencing
 
 | Frage | Antwort |

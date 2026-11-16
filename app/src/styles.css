@@ -512,3 +512,14 @@ tr.winner {
   font-weight: 600;
   margin-left: 4px;
 }
+.onboarding {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.onboarding ol {
+  padding-left: 20px;
+}
+.onboarding li {
+  margin: 6px 0;
+}

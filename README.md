@@ -63,6 +63,23 @@ cd ../app && npm run dev:bdl           # App auf Testnetz, Login nur via MetaMas
 
 Produktionswerte statt Demo: `COOLDOWN=14400 MAX_PER_DAY=6`.
 
+## Öffentlich auf Vercel
+
+Die App (`app/`) läuft als statische Seite + zwei Vercel-Functions:
+
+| Function | Zweck |
+|---|---|
+| `api/rpc.ts` | https→http-Proxy zur Kurs-RPC (Browser blockieren Mixed Content). Nur Lese-Methoden – Transaktionen gehen über MetaMask direkt an die RPC. |
+| `api/checkin.ts` | Geofence-Check-in (wie `checkin/server.js`), signiert mit eigenem Check-in-Key. |
+
+Einrichtung:
+1. Vercel → *Add New Project* → GitHub-Repo `BDL-project` importieren, **Root Directory `app`** (Framework Vite wird erkannt).
+2. Environment Variable **`CHECKIN_PRIVATE_KEY`** setzen (Wert aus `contracts/.env`, nur Check-in-Key, nie den Deploy-Key). Optional `BDL_RPC_URL`.
+3. Deploy. Danach baut jeder Push auf `main` automatisch neu.
+
+Konfiguration für Produktion: `app/.env.production` (Testnetz fest, Lesen über `/api/rpc`), SPA-Routing: `app/vercel.json`.
+Check-in-Signer wechseln: `CHECKIN_ADDRESS=0x… npx hardhat run scripts/set-checkin-signer.ts --network bdl`.
+
 ## Tests
 
 ```bash

@@ -12,7 +12,7 @@ import express from "express";
 import cors from "cors";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
-import { encodeGeohash } from "./geohash.js";
+import { encodeGeohash } from "../app/api/_geohash.js";
 
 // `npm run start:bdl` laedt contracts/.env -> BDL_RPC_URL / PRIVATE_KEY werden uebernommen
 const RPC_URL = process.env.RPC_URL ?? process.env.BDL_RPC_URL ?? "http://127.0.0.1:8545";

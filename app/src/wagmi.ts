@@ -60,7 +60,8 @@ export const config = createConfig({
     injected(),
     mock({ accounts: [demoAccounts[demoIndex]], features: { reconnect: true, defaultConnected: storage.get() } }),
   ],
-  transports: { [local.id]: http(), [bdl.id]: http() },
+  // Lesen ueber VITE_BDL_READ_RPC (auf Vercel: https-Proxy /api/rpc), sonst direkt ueber die Chain-RPC
+  transports: { [local.id]: http(), [bdl.id]: http(import.meta.env.VITE_BDL_READ_RPC || undefined) },
 });
 
 declare module "wagmi" {

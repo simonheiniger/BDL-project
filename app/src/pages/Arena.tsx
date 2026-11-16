@@ -8,8 +8,10 @@ import { TxStatus, short } from "../components/common";
 
 const CHECKIN_URL = import.meta.env.VITE_CHECKIN_URL ?? `http://${location.hostname}:8787`;
 const STATUS = ["–", "Offen", "Geschlossen", "Entschieden", "Erstattet"];
-// Fallback, falls Geolocation nicht verfuegbar (z.B. Handy ueber http statt https)
+// Nur lokal: Fallback-Standort, falls Geolocation fehlt (http). Oeffentlich (https) waere das ein
+// Freifahrtschein durch den Geofence – dort ist der echte Standort Pflicht.
 const ZHAW = { lat: 47.4973, lon: 8.7293 };
+const ALLOW_FALLBACK = import.meta.env.DEV;
 
 type Entry = { petId: bigint; player: Address; stats: readonly number[]; level: number };
 type T = {
@@ -25,13 +27,14 @@ type T = {
   entries: Entry[];
 };
 
-function getPosition(): Promise<{ lat: number; lon: number; real: boolean }> {
+function getPosition(): Promise<{ lat: number; lon: number; real: boolean } | null> {
+  const fallback = ALLOW_FALLBACK ? { ...ZHAW, real: false } : null;
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve({ ...ZHAW, real: false });
+    if (!navigator.geolocation) return resolve(fallback);
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, real: true }),
-      () => resolve({ ...ZHAW, real: false }),
-      { timeout: 8000 },
+      () => resolve(fallback),
+      { timeout: 10000, enableHighAccuracy: true },
     );
   });
 }
@@ -84,6 +87,10 @@ export default function Arena() {
     if (!petId || !c || !address) return;
     setInfo("📍 Standort wird geprüft …");
     const pos = await getPosition();
+    if (!pos) {
+      setInfo("📍 Standort-Freigabe nötig: Das Turnier ist an eine Zone gebunden (Browser fragt nach dem Standort).");
+      return;
+    }
     let res: Response;
     try {
       res = await fetch(`${CHECKIN_URL}/checkin`, {

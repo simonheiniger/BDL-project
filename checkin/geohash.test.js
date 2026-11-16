@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { encodeGeohash } from "./geohash.js";
+import { encodeGeohash } from "../app/api/_geohash.js";
 
 test("bekannte Referenzwerte", () => {
   // Wikipedia-Beispiel: 57.64911, 10.40744 -> u4pruydqqvj
