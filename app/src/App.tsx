@@ -85,7 +85,7 @@ export default function App() {
     <div className="app">
       <header>
         <NavLink to="/" className="logo">
-          🥚 BLD Pets
+          🥚 BDL Pets
         </NavLink>
         <Wallet />
       </header>

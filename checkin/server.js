@@ -68,7 +68,7 @@ export function createApp() {
 
       const expiry = Math.max(now, chainNow) + VALIDITY_S;
       const signature = await signer.signTypedData(
-        { name: "BLD Pet Arena", version: "1", chainId, verifyingContract: dep.Arena },
+        { name: "BDL Pet Arena", version: "1", chainId, verifyingContract: dep.Arena },
         {
           CheckIn: [
             { name: "player", type: "address" },

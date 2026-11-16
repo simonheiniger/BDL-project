@@ -1,4 +1,4 @@
-# Konzept: BLD Pets (verfeinert)
+# Konzept: BDL Pets (verfeinert)
 
 Alle Formeln sind in `contracts/contracts/lib/GameMath.sol` implementiert, im Frontend gespiegelt
 (`app/src/gamemath.ts`) und in `sim/balance-sim.mjs` simuliert. Tabellen unten = Ausgabe der Simulation.

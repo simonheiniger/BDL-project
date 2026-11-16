@@ -1,4 +1,4 @@
-// BLD Pets – parametrisches NFC-Haus
+// BDL Pets – parametrisches NFC-Haus
 // Unterseite hat eine Vertiefung fuer einen runden NFC-Sticker (z.B. NTAG213/215, 25 mm).
 // Der Sticker enthaelt nur eine URL: https://<app>/pet/<id>?nfc  -> Handy oeffnet die Pet-Seite.
 // Next step: NTAG 424 DNA (SUN/CMAC pro Scan) statt NTAG213, damit Tags nicht kopiert werden koennen.
@@ -16,7 +16,7 @@ door_w = 18;
 door_h = 24;
 nfc_d = 26;          // Durchmesser NFC-Sticker + Toleranz
 nfc_depth = 0.8;     // Tiefe der Sticker-Vertiefung (Restboden ueber dem Tag = floor_t - nfc_depth)
-label = "BLD";       // Praegung auf der Rueckwand
+label = "BDL";       // Praegung auf der Rueckwand
 $fn = 64;
 
 module body() {

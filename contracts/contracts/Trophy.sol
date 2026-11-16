@@ -33,7 +33,7 @@ contract Trophy is ERC721Enumerable, Ownable {
     error Soulbound();
     error NotAuthorized();
 
-    constructor() ERC721("BLD Pet Trophy", "BTRO") Ownable(msg.sender) {}
+    constructor() ERC721("BDL Pet Trophy", "BTRO") Ownable(msg.sender) {}
 
     function setRoles(address minter_, address migrator_) external onlyOwner {
         minter = minter_;

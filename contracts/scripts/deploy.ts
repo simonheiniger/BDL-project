@@ -44,7 +44,7 @@ async function main() {
   const decor = await deploy("PetDecor");
   const anatomy = await deploy("PetAnatomy");
   const renderer = await deploy("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
-  const cosmetics = await deploy("Cosmetics", ["https://bld-pets.local/cosmetics/{id}.json"]);
+  const cosmetics = await deploy("Cosmetics", ["https://bdl-pets.local/cosmetics/{id}.json"]);
   const trophy = await deploy("Trophy");
   const arena = await deploy("Arena", [await pets.getAddress(), await trophy.getAddress(), checkinSigner]);
   const market = await deploy("Marketplace", [await pets.getAddress()]);

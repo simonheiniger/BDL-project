@@ -84,7 +84,7 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(
     path.join(OUT, "index.html"),
-    `<!doctype html><meta charset="utf-8"><title>BLD Pets Galerie</title>
+    `<!doctype html><meta charset="utf-8"><title>BDL Pets Galerie</title>
 <style>body{background:#1f1d2e;color:#e0def4;font:14px system-ui;margin:16px}.g{display:grid;grid-template-columns:repeat(auto-fill,180px);gap:12px}
 .c{text-align:center}.c img{width:180px;height:180px;border-radius:12px;display:block}</style>
 <h2>Spezies (reinrassig)</h2><div class="g">${species.join("")}</div>

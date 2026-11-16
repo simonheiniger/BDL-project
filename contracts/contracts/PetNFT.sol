@@ -77,7 +77,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         uint256 mintPrice_,
         uint256 cooldown_,
         uint256 maxActionsPerDay_
-    ) ERC721("BLD Pet", "BPET") Ownable(msg.sender) {
+    ) ERC721("BDL Pet", "BPET") Ownable(msg.sender) {
         registry = registry_;
         accountImpl = accountImpl_;
         mintPrice = mintPrice_;

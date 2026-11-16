@@ -1717,7 +1717,7 @@
       "outputs": [
         {
           "internalType": "uint8",
-          "name": "",
+          "name": "i",
           "type": "uint8"
         }
       ],

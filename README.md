@@ -1,4 +1,4 @@
-# BLD Pets – Phygitales Web3-Tamagotchi
+# BDL Pets – Phygitales Web3-Tamagotchi
 
 Bonus-Projekt im Modul *Blockchains & Distributed Ledger Technologie* (ZHAW, HS 2026).
 

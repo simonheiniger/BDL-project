@@ -63,7 +63,7 @@ export async function signCheckIn(
 ) {
   const { chainId } = await ethers.provider.getNetwork();
   return signer.signTypedData(
-    { name: "BLD Pet Arena", version: "1", chainId, verifyingContract: await arena.getAddress() },
+    { name: "BDL Pet Arena", version: "1", chainId, verifyingContract: await arena.getAddress() },
     {
       CheckIn: [
         { name: "player", type: "address" },

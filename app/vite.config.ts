@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "BLD Pets",
-        short_name: "BLD Pets",
+        name: "BDL Pets",
+        short_name: "BDL Pets",
         description: "Phygitales Web3-Tamagotchi (ZHAW BDL HS26)",
         theme_color: "#1f1d2e",
         background_color: "#1f1d2e",

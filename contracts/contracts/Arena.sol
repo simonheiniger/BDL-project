@@ -85,7 +85,7 @@ contract Arena is EIP712, Ownable, ReentrancyGuard {
     error BadReveal();
 
     constructor(PetNFT pets_, Trophy trophy_, address checkinSigner_)
-        EIP712("BLD Pet Arena", "1")
+        EIP712("BDL Pet Arena", "1")
         Ownable(msg.sender)
     {
         pets = pets_;
