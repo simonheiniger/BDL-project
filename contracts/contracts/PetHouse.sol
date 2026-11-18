@@ -46,7 +46,10 @@ contract PetHouse is ERC721, EIP712, Ownable {
     mapping(uint256 => House) public houses;
     mapping(uint256 => uint256) public houseOf; // petId -> houseId (0 = nicht untergebracht)
     mapping(uint256 => Mood) private _mood;
+    /// @notice Weitere Admins, die Haeuser praegen duerfen (der Owner darf immer)
+    mapping(address => bool) public minters;
 
+    event MinterSet(address indexed minter, bool allowed);
     event HouseMinted(uint256 indexed houseId, address indexed to, uint8 tier, address tag);
     event TagChanged(uint256 indexed houseId, address tag);
     event MovedIn(uint256 indexed petId, uint256 indexed houseId);
@@ -63,6 +66,7 @@ contract PetHouse is ERC721, EIP712, Ownable {
     error HouseNotEmpty();
     error ScanExpired();
     error BadScan();
+    error NotMinter();
 
     constructor() ERC721("BDL House", "BHOUSE") EIP712("BDL Pet House", "1") Ownable(msg.sender) {}
 
@@ -99,8 +103,20 @@ contract PetHouse is ERC721, EIP712, Ownable {
 
     // ------------------------------------------------------------------ Haeuser pragen (= physisches Haus verkaufen)
 
+    /// @notice Admin-Rolle vergeben/entziehen. Nur der Owner.
+    function setMinter(address minter, bool allowed) external onlyOwner {
+        minters[minter] = allowed;
+        emit MinterSet(minter, allowed);
+    }
+
+    /// @notice Darf diese Adresse Haeuser praegen? (Owner oder Minter)
+    function isMinter(address who) public view returns (bool) {
+        return who == owner() || minters[who];
+    }
+
     /// @notice Neues Haus fuer einen frisch gedruckten Chip. `tag` = Adresse des Chip-Schluessels.
-    function mintHouse(address to, uint8 tier, address tag) external onlyOwner returns (uint256 houseId) {
+    function mintHouse(address to, uint8 tier, address tag) external returns (uint256 houseId) {
+        if (!isMinter(msg.sender)) revert NotMinter();
         if (tier >= TIERS) revert InvalidTier();
         houseId = nextHouseId++;
         houses[houseId] = House({tier: tier, occupants: 0, tag: tag, nonce: 0});

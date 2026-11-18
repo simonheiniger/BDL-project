@@ -94,7 +94,25 @@ export default function Admin() {
     return list.filter((h) => !!h);
   });
 
-  const isDev = !!address && !!owner && address.toLowerCase() === owner.toLowerCase();
+  const isOwner = !!address && !!owner && address.toLowerCase() === owner.toLowerCase();
+  // Admin = Owner oder vom Owner eingetragener Minter (PetHouse.isMinter prueft beides)
+  const { data: isMinter } = useChainQuery(
+    ["isMinter", address],
+    async (pc, c) => (await pc.readContract({ ...c.PetHouse, functionName: "isMinter", args: [address] })) as boolean,
+    !!address,
+  );
+  const isDev = !!isMinter;
+  // Aktuelle Admins aus den MinterSet-Events (letzter Eintrag pro Adresse zaehlt)
+  const { data: minters } = useChainQuery(["minters"], async (pc, c) => {
+    const logs = await pc.getContractEvents({ ...c.PetHouse, eventName: "MinterSet", fromBlock: 0n });
+    const state = new Map<string, boolean>();
+    for (const l of logs) {
+      const a = (l as unknown as { args: { minter: Address; allowed: boolean } }).args;
+      state.set(a.minter, a.allowed);
+    }
+    return [...state].filter(([, on]) => on).map(([a]) => a as Address);
+  });
+  const [newAdmin, setNewAdmin] = useState("");
   const recipient = (to || address || "") as string;
   const recipientOk = isAddress(recipient);
   const mine = pending.filter((p) => p.chain === chainId);
@@ -150,7 +168,7 @@ export default function Admin() {
       {!address && <p className="card warn">Wallet verbinden (Entwickler-Account).</p>}
       {address && !isDev && (
         <p className="card warn">
-          Nur der Entwickler ({owner ? short(owner) : "…"}) kann Häuser definieren. Dein Account {short(address)} ist es nicht. Die
+          Nur der Entwickler ({owner ? short(owner) : "…"}) und von ihm eingetragene Admins können Häuser definieren. Dein Account {short(address)} ist es nicht. Die
           Übersicht unten ist öffentlich.
         </p>
       )}
@@ -182,6 +200,38 @@ export default function Admin() {
             🏠 Häuser prägen
           </button>
           {!recipientOk && <p className="small warn-text">Ungültige Besitzer-Adresse.</p>}
+        </section>
+      )}
+
+      {isOwner && (
+        <section className="card">
+          <h3>Admins</h3>
+          <p className="muted small">Admins dürfen Häuser prägen, aber keine weiteren Admins ernennen. Nur du (Owner) verwaltest die Liste.</p>
+          {minters?.length === 0 && <p className="muted small">Keine weiteren Admins.</p>}
+          {minters?.map((a) => (
+            <div key={a} className="row between small">
+              <code>{a}</code>
+              <button
+                className="btn small"
+                disabled={!!tx.pending}
+                onClick={() => tx.send("Admin entfernen", { ...c.PetHouse, functionName: "setMinter", args: [a, false] })}
+              >
+                Entfernen
+              </button>
+            </div>
+          ))}
+          <div className="row wrap">
+            <input value={newAdmin} onChange={(e) => setNewAdmin(e.target.value.trim())} placeholder="0x… Adresse" style={{ width: "22rem", maxWidth: "100%" }} />
+            <button
+              className="btn"
+              disabled={!!tx.pending || !isAddress(newAdmin)}
+              onClick={async () => {
+                if (await tx.send("Admin hinzufügen", { ...c.PetHouse, functionName: "setMinter", args: [newAdmin, true] })) setNewAdmin("");
+              }}
+            >
+              Admin hinzufügen
+            </button>
+          </div>
         </section>
       )}
 
