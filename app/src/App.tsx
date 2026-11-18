@@ -16,6 +16,7 @@ import { getPhonePair } from "./relay";
 import { hasWallet, isMobile, metamaskLink } from "./nfc";
 import Companion from "./companion/Companion";
 import { isNative } from "./native";
+import { AppGate } from "./components/AppGate";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -105,6 +106,7 @@ function ChainGuard() {
 export default function App() {
   if (isNative) return <Companion />;
   return (
+    <AppGate>
     <div className="app">
       <header>
         <NavLink to="/" className="logo">
@@ -137,5 +139,6 @@ export default function App() {
         </Routes>
       </main>
     </div>
+    </AppGate>
   );
 }

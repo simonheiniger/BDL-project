@@ -2,7 +2,7 @@
 //   APP_URL=https://meine-app.vercel.app npm run native:build        (APP_URL = Vercel-Domain der PC-App)
 // Danach: npm run native:apk  (debug-APK)  oder  npx cap open android  (Android Studio)
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const run = (cmd, env = {}) => execSync(cmd, { stdio: "inherit", env: { ...process.env, ...env } });
 
@@ -14,6 +14,8 @@ const host = new URL(appUrl).host;
 
 run("npx tsc -b");
 run("npx vite build --mode native", { VITE_API_BASE: appUrl });
+// Die heruntergeladene APK (public/bdl-pets.apk) gehoert nicht in die APK selbst
+rmSync("dist/bdl-pets.apk", { force: true });
 if (!existsSync("android")) run("npx cap add android");
 run("npx cap sync android");
 

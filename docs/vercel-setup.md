@@ -46,3 +46,8 @@ Schick dem App-Bauer die **genaue Produktions-Domain** (z. B. `https://bdl-pets-
 - Last: Eine offene gekoppelte Browser-Seite fragt den Relay alle 1,5–4 s ab (je Anfrage ca. 1 Redis-Befehl). Das Gratis-Kontingent reicht für ein Kursprojekt; bei Dauerbetrieb kann man im Upstash-Dashboard den Verbrauch sehen.
 - Der Relay speichert nur Anfragen und Signaturen (ca. 5 Minuten, dann automatisch gelöscht), nie Chip-Schlüssel und keine Wallet-Schlüssel.
 - Der Standard-CORS erlaubt nur die Handy-App (`https://localhost`).
+
+## 5. APK-Download auf der Seite
+
+Öffnet jemand die Seite auf einem Android-Handy (ohne Wallet-Browser), zeigt sie statt der Web-App einen Download-Button für `/bdl-pets.apk`. Die Datei liegt im Repo unter `app/public/bdl-pets.apk` und wird mit deployt. Prüfen: `https://<deine-domain>/bdl-pets.apk` lädt eine ca. 4 MB große Datei herunter (keine Webseite).
+Wichtig: Die APK muss mit der echten Domain gebaut sein (`APP_URL=https://<domain> npm run native:build && npm run native:apk`, kopiert die APK automatisch nach `app/public/`), sonst spricht die App mit der falschen Adresse.
