@@ -181,7 +181,7 @@ export default function Companion() {
   const [scanTick, setScanTick] = useState(0);
   const pc = usePublicClient();
   const { data: bal } = useBalance({ address: me });
-  const { data: grants } = useChainQuery<Grant[]>(["grants", me], (pc, c) => loadGrants(pc, c, me));
+  const { data: grants, error: grantsError, refetch } = useChainQuery<Grant[]>(["grants", me], (pc, c) => loadGrants(pc, c, me));
 
   async function pairFromInput() {
     const text = manual.trim();
@@ -261,8 +261,15 @@ export default function Companion() {
 
         {!c ? (
           <p className="card warn">Auf Chain {chainId} ist nichts deployt.</p>
+        ) : grantsError && !grants ? (
+          <section className="card warn">
+            <p className="small">⚠️ Keine Verbindung zur Chain: {String((grantsError as Error).message).slice(0, 200)}</p>
+            <button className="btn small" onClick={() => refetch()}>
+              Nochmal versuchen
+            </button>
+          </section>
         ) : !grants ? (
-          <p className="muted">Lade…</p>
+          <p className="muted">Verbinde mit der Chain …</p>
         ) : grants.length === 0 ? (
           <section className="card">
             <h3>Anmelden</h3>
