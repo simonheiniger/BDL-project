@@ -160,3 +160,5 @@ Nur der Owner des `PetHouse`-Contracts (Deployer-Wallet) kann Häuser prägen (`
 3. Am PC „✔ Chip beschrieben“ drücken (löscht den Schlüssel vom PC). „CSV exportieren“ sichert die URLs vorher (geheim, nicht committen).
 
 Ein-/Auslagern der Tiere und Pflege laufen in der Handy-App (Caretaker darf `interact`, `moveIn`, `moveOut`). **`PetHouse` hat sich geändert → Contracts neu deployen.**
+
+**Weitere Admins:** Der Owner trägt sie in `/admin` unter „Admins“ ein (oder `ADMIN=0x… npx hardhat run scripts/set-minter.ts --network bdl`). Admins dürfen Häuser prägen, aber keine weiteren Admins ernennen. Contract-Funktionen: `setMinter`, `isMinter`.
