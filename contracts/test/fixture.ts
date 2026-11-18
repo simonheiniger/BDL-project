@@ -1,13 +1,13 @@
 import { ethers } from "hardhat";
 import { time, mine } from "@nomicfoundation/hardhat-network-helpers";
-import type { PetNFT, Arena, PetHouse } from "../typechain-types";
+import type { PetNFT, Arena, PetHouse, PetGames } from "../typechain-types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
 export const MINT_PRICE = ethers.parseEther("0.01");
 
 /** Deploy aller Contracts. cooldown/maxPerDay steuerbar (Tests: 0 / gross = schnell leveln). */
 export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
-  const [deployer, alice, bob, carol, host, checkin] = await ethers.getSigners();
+  const [deployer, alice, bob, carol, host, checkin, gamer] = await ethers.getSigners();
 
   const registry = await ethers.deployContract("ERC6551Registry");
   const accountImpl = await ethers.deployContract("PetAccount");
@@ -34,6 +34,8 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
   const houses = await ethers.deployContract("PetHouse");
   await houses.setPets(await pets.getAddress());
   await pets.setHouses(await houses.getAddress());
+  const games = await ethers.deployContract("PetGames", [await pets.getAddress(), gamer.address]);
+  await pets.setGames(await games.getAddress());
 
   await pets.setGameContracts(await cosmetics.getAddress(), await trophy.getAddress());
   await trophy.setRoles(await arena.getAddress(), await pets.getAddress());
@@ -41,7 +43,7 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
   await cosmetics.addItem("Sonnenbrille", ethers.parseEther("0.002"), 2);
   await cosmetics.addItem("Krone", ethers.parseEther("0.02"), 50);
 
-  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, renderer, pets, cosmetics, trophy, arena, market, houses };
+  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, renderer, pets, cosmetics, trophy, arena, market, houses, games, gamer };
 }
 
 /** Schluessel des (simulierten) NFC-Chips eines Hauses: deterministisch aus der houseId, damit Tests zustandslos bleiben */
@@ -186,4 +188,27 @@ function sqrtBig(n: bigint) {
     y = (x + n / x) / 2n;
   }
   return x;
+}
+
+/** Spiel-Gutschein, wie ihn der Spiele-Server (api/game.ts) ausstellt */
+export async function signVoucher(
+  games: PetGames,
+  signer: HardhatEthersSigner,
+  v: { player: string; petId: bigint; kind: number; xp: number; nonce: bigint; expiry: bigint },
+) {
+  const { chainId } = await ethers.provider.getNetwork();
+  return signer.signTypedData(
+    { name: "BDL Pet Games", version: "1", chainId, verifyingContract: await games.getAddress() },
+    {
+      Voucher: [
+        { name: "player", type: "address" },
+        { name: "petId", type: "uint256" },
+        { name: "kind", type: "uint8" },
+        { name: "xp", type: "uint16" },
+        { name: "nonce", type: "uint256" },
+        { name: "expiry", type: "uint64" },
+      ],
+    },
+    v,
+  );
 }

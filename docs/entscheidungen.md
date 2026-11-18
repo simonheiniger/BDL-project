@@ -78,6 +78,16 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Warum ein eigener Check-in-Key? | Der Key liegt auf einem Server (Vercel-Env). Wird er geleakt, kann man nur Check-ins fälschen – mit dem Deploy-Key könnte man den Renderer tauschen oder Einnahmen abziehen. Least Privilege. |
 | Warum kein Ersatz-Standort mehr? | Lokal (http) gibt es kein GPS, darum der ZHAW-Fallback. Öffentlich wäre der Fallback ein Freifahrtschein durch den Geofence – dort ist der echte Standort Pflicht. |
 
+## Minispiele
+
+| Frage | Antwort |
+|---|---|
+| Geht Leveln ganz ohne Transaktion? | Nein – alles, was am NFT gespeichert wird, braucht eine Transaktion. Aber: viele Runden off-chain spielen und **gebündelt** mit einer Transaktion einlösen. Gasless (Server zahlt Gas) wäre der nächste Schritt, macht den Server aber zentraler. |
+| Warum nicht die Punktzahl des Browsers glauben? | Der Browser ist manipulierbar. Der Server spielt Memory-Züge und Sprünge mit demselben Code nach und kennt die Quiz-Lösungen allein. |
+| Kann man trotzdem schummeln? | Teilweise: Das Memory-Layout ist im Browser sichtbar, ein Bot könnte das Rennen perfekt spielen, Quiz-Antworten kann man nachschlagen. Darum begrenzt der Contract den Schaden (200 XP pro Pet und Tag, 40 pro Gutschein). |
+| Warum ein verschlüsseltes Token statt Datenbank? | Zustandslos (keine DB nötig) und trotzdem fälschungssicher. Doppeltes Einlösen verhindert der Contract über die Nonce. |
+| Vertrauensannahme? | Der Spiele-Server ist ein Orakel wie der Check-in-Service: Wer den Key hat, kann Gutscheine erzeugen. Eigener Key (`GAME_PRIVATE_KEY`), nicht der Deploy-Key; Tageslimit begrenzt den Schaden. |
+
 ## Geofencing
 
 | Frage | Antwort |

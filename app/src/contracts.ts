@@ -4,7 +4,7 @@ import deployments from "./contracts/deployments.json";
 import abis from "./contracts/abis.json";
 
 // deployments.json + abis.json werden von contracts/scripts/deploy.ts geschrieben.
-type Name = "PetNFT" | "PetRenderer" | "PetAccount" | "Cosmetics" | "Trophy" | "Arena" | "Marketplace" | "PetHouse";
+type Name = "PetNFT" | "PetRenderer" | "PetAccount" | "Cosmetics" | "Trophy" | "Arena" | "Marketplace" | "PetHouse" | "PetGames";
 
 export type Contracts = Record<Name, { address: Address; abi: Abi }>;
 
@@ -22,6 +22,7 @@ export function useContracts(): Contracts | null {
     Arena: c("Arena"),
     Marketplace: c("Marketplace"),
     PetHouse: c("PetHouse"),
+    PetGames: c("PetGames"),
   };
 }
 

@@ -58,12 +58,15 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     IPetRenderer public renderer;
     /// @notice Haeuser (physische NFC-Haeuser). Pets entstehen nur in freien Plaetzen und werden nur nach Scan gepflegt.
     IPetHouse public houses;
+    /// @notice Minispiele (PetGames): darf XP aus eingeloesten Spiel-Gutscheinen gutschreiben.
+    address public games;
 
     uint256 private _nextId = 1;
     mapping(uint256 => Pet) private _pets;
 
     event Minted(address indexed owner, uint256 indexed petId, address account);
     event Interacted(uint256 indexed petId, Action action, uint256 level, uint256 xp);
+    event GameXp(uint256 indexed petId, uint256 amount, uint256 level, uint256 xp);
     event LevelUp(uint256 indexed petId, uint256 newLevel, uint8 focusStat);
     event Fused(uint256 indexed keepId, uint256 indexed burnId, uint256 newLevel, uint8 fusionCount);
     event Equipped(uint256 indexed petId, uint8 itemId);
@@ -79,6 +82,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     error AlreadyConfigured();
     error ItemNotOwned();
     error HousesNotSet();
+    error NotGames();
 
     constructor(
         IERC6551Registry registry_,
@@ -102,6 +106,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     }
 
     /// @notice Einmalig nach Deploy: Haus-Contract verknuepfen.
+    /// @notice Einmalig nach Deploy: Minispiel-Contract verknuepfen.
+    function setGames(address games_) external onlyOwner {
+        if (games != address(0)) revert AlreadyConfigured();
+        games = games_;
+    }
+
     function setHouses(address houses_) external onlyOwner {
         if (address(houses) != address(0)) revert AlreadyConfigured();
         houses = IPetHouse(houses_);
@@ -186,6 +196,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         p.lastAction = uint64(block.timestamp);
         p.focus[uint8(action)]++;
 
+        _addXp(petId, p, gain);
+        emit Interacted(petId, action, p.level, p.xp);
+    }
+
+    /// @dev XP gutschreiben + Level-Ups (gemeinsam fuer Pflege und Minispiele)
+    function _addXp(uint256 petId, Pet storage p, uint256 gain) internal {
         uint256 xp = p.xp + gain;
         uint256 level = p.level;
         while (level < GameMath.MAX_LEVEL && xp >= GameMath.xpToNext(level)) {
@@ -195,7 +211,18 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         }
         p.level = uint16(level);
         p.xp = uint32(level == GameMath.MAX_LEVEL ? 0 : xp);
-        emit Interacted(petId, action, level, p.xp);
+    }
+
+    /// @notice XP aus Minispielen (nur PetGames, nach Pruefung von Signatur, Einmaligkeit und Tageslimit).
+    /// @param focusStat Stat, auf den das Spiel einzahlt (Memory/Quiz -> INT, Rennen -> AGI)
+    function gameXp(uint256 petId, uint256 amount, uint8 focusStat) external {
+        if (msg.sender != games) revert NotGames();
+        _requireOwned(petId);
+        Pet storage p = _pets[petId];
+        if (p.level >= GameMath.MAX_LEVEL || amount == 0) return;
+        p.focus[focusStat]++;
+        _addXp(petId, p, amount);
+        emit GameXp(petId, amount, p.level, p.xp);
     }
 
     /// @dev Alle Stats +1, Fokus-Stat (meistgenutzte Aktion) zusaetzlich +2.

@@ -32,6 +32,24 @@ Warum Exponent 1.5: Linear (1.0) wäre nach wenigen Wochen „durchgespielt“, 
 ab Level ~10 abhängen. 1.5 gibt schnellen Einstieg (Level 5 = Fusionsreife in gut einer Woche) und macht hohe Level zu einem
 echten Zeitinvestment – das ist, was hohe Level handelswert macht. Exponent ist Tuning-Parameter (`EXP=1.3 node sim/balance-sim.mjs`).
 
+### 1.2b Minispiele: Leveln ohne Transaktion pro Aktion
+
+Neben der Pflege im Haus (NFC-Scan, eine Transaktion pro Aktion) gibt es **Minispiele** in der App:
+🧠 Memory, ❓ Blockchain-Quiz (Fragen aus dem BDL-Kurs), 🏃 Hürdenlauf.
+
+```
+Browser spielt (off-chain, gratis) ──Ergebnis──► api/game.ts prüft ──► signierter XP-Gutschein (EIP-712)
+Gutscheine sammeln ──► PetGames.claim(gutscheine[], signaturen[])  = EINE Transaktion für beliebig viele Runden
+```
+
+- **Server prüft, Browser nicht:** Memory-Züge und Sprung-Zeitpunkte werden mit demselben Code (`app/api/_games.ts`)
+  nachgespielt; die Quiz-Lösungen kennt nur der Server, die Antwortreihenfolge wird pro Runde gemischt.
+- **Runden-Token** ist mit AES-256-GCM verschlüsselt: zustandslos, fälschungssicher, Seed bleibt geheim.
+- **On-chain-Grenzen (`PetGames`):** jeder Gutschein nur einmal (Nonce), max. 40 XP pro Gutschein, **max. 200 Spiel-XP
+  pro Pet und Tag** (≈ 10 Pflege-Aktionen) → Spiele ergänzen die Pflege, ersetzen sie nicht. Über dem Limit wird gekappt.
+- XP: Memory 40 − 2 × Fehlversuche (min. 10) · Quiz 8 pro richtige Antwort · Rennen 5 + Strecke (max. 40).
+- Memory und Quiz zahlen auf den INT-Fokus ein, das Rennen auf AGI.
+
 ### 1.3 Turnier: gewichteter Zufall
 
 Pro Turnier wird eine **Challenge** ausgelost (erst beim Reveal – sonst würden Spieler gezielt das passende Pet anmelden):

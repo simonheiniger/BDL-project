@@ -14,6 +14,7 @@ import path from "path";
  *   CHECKIN_ADDRESS Adresse des Check-in-Signers (Default: Hardhat-Account #5, nur lokal!)
  */
 const HARDHAT_ACCOUNT_5 = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc";
+const HARDHAT_ACCOUNT_6 = "0x976EA74026E726554dB657fA54763abd0C3a0aa9"; // lokaler Spiele-Signer (oeffentlicher Testkey!)
 const OUT_DIR = path.join(__dirname, "../../app/src/contracts");
 
 async function main() {
@@ -21,7 +22,10 @@ async function main() {
   const { chainId } = await ethers.provider.getNetwork();
   const cooldown = BigInt(process.env.COOLDOWN ?? "0");
   const maxPerDay = BigInt(process.env.MAX_PER_DAY ?? "1000");
-  const checkinSigner = process.env.CHECKIN_ADDRESS ?? HARDHAT_ACCOUNT_5;
+  // Echte Signer-Keys (contracts/.env) nur auf dem Testnetz; lokal signieren die Dev-Server mit den Hardhat-Testkeys
+  const live = network.name === "bdl";
+  const checkinSigner = (live && process.env.CHECKIN_ADDRESS) || HARDHAT_ACCOUNT_5;
+  const gameSigner = (live && process.env.GAME_ADDRESS) || HARDHAT_ACCOUNT_6;
   console.log(`Deploy auf ${network.name} (chainId ${chainId}) als ${deployer.address}`);
   console.log(`cooldown=${cooldown}s maxPerDay=${maxPerDay} checkinSigner=${checkinSigner}`);
 
@@ -54,6 +58,9 @@ async function main() {
   await (await (pets as any).setGameContracts(await cosmetics.getAddress(), await trophy.getAddress())).wait();
   await (await (houses as any).setPets(await pets.getAddress())).wait();
   await (await (pets as any).setHouses(await houses.getAddress())).wait();
+  // Minispiele: Gutscheine signiert der Spiele-Server (GAME_ADDRESS = eigener Key, nie der Deploy-Key)
+  const games = await deploy("PetGames", [await pets.getAddress(), gameSigner]);
+  await (await (pets as any).setGames(await games.getAddress())).wait();
   await (await (pets as any).setRenderer(await renderer.getAddress())).wait();
   await (await (trophy as any).setRoles(await arena.getAddress(), await pets.getAddress())).wait();
 
@@ -79,6 +86,7 @@ async function main() {
     Arena: await arena.getAddress(),
     Marketplace: await market.getAddress(),
     PetHouse: await houses.getAddress(),
+    PetGames: await games.getAddress(),
   };
 
   // Adressen pro chainId sammeln (lokal + Kurs-Testnetz koennen parallel existieren)

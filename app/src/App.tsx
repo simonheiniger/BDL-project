@@ -9,6 +9,7 @@ import Fusion from "./pages/Fusion";
 import Market from "./pages/Market";
 import Arena from "./pages/Arena";
 import Galerie from "./pages/Galerie";
+import Spiele from "./pages/Spiele";
 import HousePage from "./pages/House";
 import NfcSetup from "./pages/NfcSetup";
 import PhonePage, { PhoneSigner } from "./pages/Phone";
@@ -113,6 +114,7 @@ export default function App() {
         <NavLink to="/" end>
           Pets
         </NavLink>
+        <NavLink to="/spiele">Spiele</NavLink>
         <NavLink to="/fusion">Fusion</NavLink>
         <NavLink to="/market">Markt</NavLink>
         <NavLink to="/arena">Arena</NavLink>
@@ -131,6 +133,7 @@ export default function App() {
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />
           <Route path="/galerie" element={<Galerie />} />
+          <Route path="/spiele" element={<Spiele />} />
         </Routes>
       </main>
     </div>
