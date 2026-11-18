@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import type { Address } from "viem";
 import { useContracts } from "../contracts";
@@ -27,6 +27,28 @@ async function api(body: unknown) {
 // ---------------------------------------------------------------- Gutschein-Speicher (pro Spieler + Chain)
 
 const storeKey = (chainId: number, player?: string) => `game-vouchers:${chainId}:${player?.toLowerCase()}`;
+/**
+ * Nur das Pet ohne Karten-Hintergrund und Rahmen (fuer das Rennen). Schneidet am festen Aufbau von PetRenderer.svg:
+ * Hintergrund steht zwischen `scale(12.5)">` und dem Schatten-Rect, Rahmen/Funkeln nach dem letzten `</g></g></g>`.
+ * Passt das Muster nicht (anderer Renderer), bleibt das Bild unveraendert.
+ */
+function spriteOnly(image: string): string {
+  try {
+    const b64 = image.startsWith("data:image/svg+xml;base64,");
+    const raw = b64 ? atob(image.split(",")[1]) : decodeURIComponent(image.split(",")[1] ?? "");
+    const open = '<g transform="scale(12.5)">';
+    const shadow = '<rect x="9" y="29" width="14" height="1" fill="#000" opacity=".18"/>';
+    const a = raw.indexOf(open);
+    const b = raw.indexOf(shadow);
+    const c = raw.lastIndexOf("</g></g></g>");
+    if (a < 0 || b < a || c < b) return image;
+    const svg = raw.slice(0, a + open.length) + raw.slice(b, c + 12) + "</svg>";
+    return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+  } catch {
+    return image;
+  }
+}
+
 function loadStore(key: string): Stored[] {
   try {
     const all = JSON.parse(localStorage.getItem(key) ?? "[]") as Stored[];
@@ -306,6 +328,7 @@ function Quiz({ questions, onDone }: { questions: { q: string; options: string[]
 // ---------------------------------------------------------------- Huerdenlauf (gleiche Regeln wie Server-Simulation)
 
 function Race({ obstacles, petImage, onDone }: { obstacles: number[]; petImage: string; onDone: (jumps: number[]) => void }) {
+  const sprite = useMemo(() => spriteOnly(petImage), [petImage]);
   const [tick, setTick] = useState(0);
   const [running, setRunning] = useState(false);
   const jumps = useRef<number[]>([]);
@@ -369,7 +392,7 @@ function Race({ obstacles, petImage, onDone }: { obstacles: number[]; petImage: 
         Leertaste / Pfeil hoch / Tippen = springen. Je weiter du kommst, desto mehr XP (max. 40 nach 30 s).
       </p>
       <div className="race" onPointerDown={running ? jump : undefined}>
-        <img className="runner pixel" src={petImage} style={{ transform: `translateY(${-lift}px)` }} alt="" />
+        <img className="runner pixel" src={sprite} style={{ transform: `translateY(${-lift}px)` }} alt="" />
         {obstacles
           .filter((o) => o >= tick - 4 && o <= tick + 60)
           .map((o) => (
