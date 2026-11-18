@@ -13,6 +13,7 @@ const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TO
 const REQ_TTL = 300; // s
 const PRESENCE_TTL = 12; // s
 const REGISTER_TTL = 3600; // s
+const CODE_TTL = 300; // s, Kopplungs-Code (8 Ziffern, einmalig)
 const MAX_QUEUE = 20;
 const MAX_FIELD = 2048;
 
@@ -42,6 +43,8 @@ function memRun(cmd: Cmd): unknown {
       return Array.isArray(live?.v) ? (live.v.shift() ?? null) : null;
     case "LLEN":
       return Array.isArray(live?.v) ? live.v.length : 0;
+    case "DEL":
+      return mem.delete(key) ? 1 : 0;
     case "EXPIRE":
       if (live) live.exp = now + Number(rest[0]) * 1000;
       return live ? 1 : 0;
@@ -91,7 +94,7 @@ const isPair = (s: unknown): s is string => typeof s === "string" && /^[0-9a-f]{
 const isId = (s: unknown): s is string => typeof s === "string" && /^[0-9a-f]{8,32}$/.test(s);
 const isText = (s: unknown): s is string => typeof s === "string" && s.length > 0 && s.length <= MAX_FIELD;
 
-type Body = { a?: string; pair?: unknown; id?: unknown; payload?: unknown; sig?: unknown; expiry?: unknown; houses?: unknown; address?: unknown };
+type Body = { a?: string; pair?: unknown; id?: unknown; payload?: unknown; sig?: unknown; expiry?: unknown; houses?: unknown; address?: unknown; code?: unknown };
 
 export async function POST(request: Request): Promise<Response> {
   const text = await request.text();
@@ -101,6 +104,18 @@ export async function POST(request: Request): Promise<Response> {
     b = JSON.parse(text);
   } catch {
     return json({ error: "invalid json" }, 400);
+  }
+  if (b.a === "claim") {
+    // Handy loest den Code ein (einmalig) und erhaelt die Pairing-ID
+    if (typeof b.code !== "string" || !/^\d{8}$/.test(b.code)) return json({ error: "bad code" }, 400);
+    try {
+      const [pair] = await run([["GET", `bdl:c:${b.code}`]]);
+      if (!pair) return json({ error: "Code ungültig oder abgelaufen" }, 404);
+      await run([["DEL", `bdl:c:${b.code}`]]);
+      return json({ pair });
+    } catch (e) {
+      return json({ error: (e as Error).message }, 502);
+    }
   }
   if (!isPair(b.pair)) return json({ error: "bad pair" }, 400);
   const q = `bdl:q:${b.pair}`; // Anfragen PC -> Handy (Liste)
@@ -134,6 +149,15 @@ export async function POST(request: Request): Promise<Response> {
         const houses = Array.isArray(b.houses) ? b.houses.filter((n) => Number.isSafeInteger(n) && n > 0).slice(0, 50) : [];
         await run([["SET", p, JSON.stringify({ houses }), "EX", PRESENCE_TTL]]);
         return json({ ok: true });
+      }
+      case "code": {
+        // Kurzer Einmal-Code als Ersatz fuer den QR-Code (Handy ohne App-Link/Kamera): code -> Pairing-ID, 5 min gueltig
+        const bytes = crypto.getRandomValues(new Uint32Array(1));
+        const code = String(bytes[0] % 100_000_000).padStart(8, "0");
+        const [taken] = await run([["GET", `bdl:c:${code}`]]);
+        if (taken) return json({ error: "try again" }, 503);
+        await run([["SET", `bdl:c:${code}`, b.pair, "EX", CODE_TTL]]);
+        return json({ code, ttl: CODE_TTL });
       }
       case "register": {
         // Handy-App meldet die Adresse ihres Caretaker-Schluessels. Erste Adresse gewinnt (ein Foto vom QR-Code

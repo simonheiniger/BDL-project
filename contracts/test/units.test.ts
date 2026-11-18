@@ -484,31 +484,6 @@ describe("Marketplace", () => {
 });
 
 describe("PetHouse: NFC-Haus, Kapazitaet, Zufriedenheit", () => {
-  it("Minter-Rolle: nur Owner ernennt, Minter praegt, Entzug wirkt sofort", async () => {
-    const { houses, alice, bob } = await loadFixture(fast);
-    await expect(houses.connect(alice).mintHouse(alice.address, 0, bob.address)).to.be.revertedWithCustomError(
-      houses,
-      "NotMinter",
-    );
-    await expect(houses.connect(alice).setMinter(alice.address, true)).to.be.revertedWithCustomError(
-      houses,
-      "OwnableUnauthorizedAccount",
-    );
-    await expect(houses.setMinter(alice.address, true)).to.emit(houses, "MinterSet").withArgs(alice.address, true);
-    await houses.connect(alice).mintHouse(bob.address, 2, bob.address);
-    expect(await houses.ownerOf((await houses.nextHouseId()) - 1n)).to.equal(bob.address);
-    // Minter kann keine weiteren Minter ernennen
-    await expect(houses.connect(alice).setMinter(bob.address, true)).to.be.revertedWithCustomError(
-      houses,
-      "OwnableUnauthorizedAccount",
-    );
-    await houses.setMinter(alice.address, false);
-    await expect(houses.connect(alice).mintHouse(alice.address, 0, bob.address)).to.be.revertedWithCustomError(
-      houses,
-      "NotMinter",
-    );
-  });
-
   it("Mint nur mit eigenem Haus mit freiem Platz (Huette = 1 Platz)", async () => {
     const { pets, houses, alice, bob } = await loadFixture(fast);
     const hut = await mintHouse(houses, alice.address, 0);
@@ -763,5 +738,32 @@ describe("Caretaker: Ein-/Auslagern (Handy-App)", () => {
     await expect(houses.connect(phone).moveOut(id)).to.be.revertedWithCustomError(houses, "NotPetOwner");
     // Besitzer selbst kann weiterhin
     await houses.connect(alice).moveOut(id);
+  });
+});
+
+describe("PetHouse: Admin-Rolle (Minter)", () => {
+  it("nur Owner und eingetragene Minter praegen Haeuser; Minter koennen keine Admins ernennen", async () => {
+    const { houses, deployer, alice, bob } = await loadFixture(fast);
+    const tag = ethers.Wallet.createRandom().address;
+
+    await expect(houses.connect(alice).mintHouse(alice.address, 0, tag)).to.be.revertedWithCustomError(houses, "NotMinter");
+    expect(await houses.canMint(alice.address)).to.equal(false);
+    expect(await houses.canMint(deployer.address)).to.equal(true);
+
+    // nur der Owner ernennt
+    await expect(houses.connect(alice).setMinter(alice.address, true)).to.be.revertedWithCustomError(houses, "OwnableUnauthorizedAccount");
+    await expect(houses.connect(deployer).setMinter(alice.address, true)).to.emit(houses, "MinterSet").withArgs(alice.address, true);
+
+    await houses.connect(alice).mintHouse(bob.address, 2, tag);
+    expect(await houses.ownerOf(1n)).to.equal(bob.address);
+    expect((await houses.houses(1n)).tier).to.equal(2n);
+
+    // Minter ernennt keine weiteren
+    await expect(houses.connect(alice).setMinter(bob.address, true)).to.be.revertedWithCustomError(houses, "OwnableUnauthorizedAccount");
+
+    // Entzug wirkt sofort; Owner behaelt das Recht
+    await houses.connect(deployer).setMinter(alice.address, false);
+    await expect(houses.connect(alice).mintHouse(alice.address, 0, tag)).to.be.revertedWithCustomError(houses, "NotMinter");
+    await houses.connect(deployer).mintHouse(deployer.address, 0, tag);
   });
 });

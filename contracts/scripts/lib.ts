@@ -28,7 +28,7 @@ export const TIER_NAMES = ["Huette", "Bauernhaus", "Cottage", "Herrenhaus", "Vil
 
 /** Chip-URL, die auf den NFC-Sticker geschrieben wird. Der Schluessel steht im Fragment (#k=...) und geht nie an einen Server. */
 export const chipUrl = (houseId: bigint, tagKey: string) =>
-  `${process.env.APP_URL ?? "https://bdl-pets.vercel.app"}/house/${houseId}#k=${tagKey.replace(/^0x/, "")}`;
+  `${process.env.APP_URL ?? "https://bdl-project.vercel.app"}/house/${houseId}#k=${tagKey.replace(/^0x/, "")}`;
 
 /** EIP-712 Scan-Signatur des Chip-Schluessels (macht in der App der Browser; hier fuer Skripte/Seeds) */
 export async function signScan(houses: any, tagKey: string, player: string, petId: bigint) {

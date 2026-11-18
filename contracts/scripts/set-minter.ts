@@ -1,17 +1,20 @@
-// Haus-Minter setzen/entziehen: MINTER=0x... [ALLOWED=0] npx hardhat run scripts/set-minter.ts --network bdl
-import { ethers, network } from "hardhat";
-import deployments from "../../app/src/contracts/deployments.json";
+import { ethers } from "hardhat";
+import { load } from "./lib";
 
+/**
+ * Admin (Minter) fuer PetHouse eintragen oder entziehen – nur der Owner (Deployer-Key).
+ *   ADMIN=0xDeineAdresse npx hardhat run scripts/set-minter.ts --network bdl
+ *   ADMIN=0x... REMOVE=1 npx hardhat run scripts/set-minter.ts --network bdl
+ */
 async function main() {
-  const chainId = String(network.config.chainId ?? 31337);
-  const addr = (deployments as Record<string, Record<string, string>>)[chainId]?.PetHouse;
-  if (!addr) throw new Error(`kein PetHouse auf ${chainId}`);
-  const minter = process.env.MINTER;
-  if (!minter || !ethers.isAddress(minter)) throw new Error("MINTER=0x... fehlt");
-  const allowed = process.env.ALLOWED !== "0";
-  const houses = await ethers.getContractAt("PetHouse", addr);
-  await (await houses.setMinter(minter, allowed)).wait();
-  console.log(`Minter ${minter}: ${await houses.minters(minter)}`);
+  const { houses } = await load();
+  const admin = process.env.ADMIN;
+  if (!admin || !ethers.isAddress(admin)) throw new Error("ADMIN=0x... (gueltige Adresse) setzen");
+  const allowed = !process.env.REMOVE;
+  const [me] = await ethers.getSigners();
+  if ((await houses.owner()).toLowerCase() !== me.address.toLowerCase()) throw new Error(`Signer ${me.address} ist nicht der Owner`);
+  await (await houses.setMinter(admin, allowed)).wait();
+  console.log(`${admin}: ${allowed ? "ist jetzt Admin" : "ist kein Admin mehr"} (canMint=${await houses.canMint(admin)})`);
 }
 
 main().catch((e) => {
