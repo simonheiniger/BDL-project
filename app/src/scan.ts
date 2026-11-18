@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Address, Hex, PublicClient } from "viem";
 import { getPhonePair } from "./relay";
+import { isNative } from "./native";
 
 /**
  * NFC-Scan: Der Chip enthaelt die URL /house/<id>#k=<privater Chip-Schluessel>. Das Fragment geht nie an einen
@@ -13,7 +14,7 @@ const EVENT = "bdl-scan";
 const storageKey = (chainId: number, houseId: bigint) => `bdl.scan.${chainId}.${houseId}`;
 
 /** Gekoppeltes Handy: Scan muss Tab-Wechsel/Schliessen ueberleben (Signer laeuft in einem anderen Tab) -> localStorage */
-const store = (): Storage => (getPhonePair() ? localStorage : sessionStorage);
+const store = (): Storage => (isNative || getPhonePair() ? localStorage : sessionStorage);
 
 export function saveScan(chainId: number, houseId: bigint, key: Hex) {
   try {

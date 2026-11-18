@@ -636,3 +636,74 @@ describe("PetHouse: NFC-Haus, Kapazitaet, Zufriedenheit", () => {
     await mintPet(pets, alice, house); // Platz wieder frei
   });
 });
+
+describe("Caretaker (Handy-App darf nur pflegen)", () => {
+  const caretakerSetup = async () => {
+    const f = await loadFixture(fast);
+    const phone = ethers.Wallet.createRandom().connect(ethers.provider);
+    const until = BigInt(await time.latest()) + 30n * 86400n;
+    return { ...f, phone, until };
+  };
+  const careAs = async (pets: any, houses: any, phone: any, owner: string, id: bigint) => {
+    const { expiry, sig } = await signScan(houses, owner, id);
+    return pets.connect(phone).interact(id, 3, expiry, sig);
+  };
+
+  it("Besitzer berechtigt Handy-Schluessel und schickt Gas mit; Handy pflegt, Scan bleibt Pflicht", async () => {
+    const { pets, houses, alice, phone, until } = await caretakerSetup();
+    const { id } = await mintPet(pets, alice);
+    await expect(
+      pets.connect(alice).authorizeCaretaker(phone.address, until, { value: ethers.parseEther("0.5") }),
+    ).to.emit(pets, "CaretakerSet");
+    expect(await ethers.provider.getBalance(phone.address)).to.equal(ethers.parseEther("0.5"));
+    expect(await pets.isCaretaker(alice.address, phone.address)).to.equal(true);
+
+    await expect(careAs(pets, houses, phone, alice.address, id)).to.emit(pets, "Interacted");
+    // ohne gueltigen Chip-Scan geht es auch fuer den Caretaker nicht
+    await expect(pets.connect(phone).interact(id, 3, until, ethers.hexlify(ethers.randomBytes(65)))).to.be.reverted;
+  });
+
+  it("Caretaker darf nichts ausser pflegen (kein Transfer, keine Fusion, keine neue Berechtigung)", async () => {
+    const { pets, alice, bob, phone, until } = await caretakerSetup();
+    const a = await mintPet(pets, alice);
+    const b = await mintPet(pets, alice);
+    await pets.connect(alice).authorizeCaretaker(phone.address, until, { value: ethers.parseEther("0.5") });
+    await expect(pets.connect(phone).transferFrom(alice.address, bob.address, a.id)).to.be.reverted;
+    await expect(pets.connect(phone).fuse(a.id, b.id)).to.be.reverted;
+    // fremde Pets kann der Caretaker von Alice nicht pflegen
+    const { id } = await mintPet(pets, bob);
+    const houses = await ethers.getContractAt("PetHouse", await pets.houses());
+    await expect(careAs(pets, houses, phone, bob.address, id)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+  });
+
+  it("laeuft ab, kann widerrufen werden und endet beim Verkauf des Pets", async () => {
+    const { pets, houses, alice, bob, phone, until } = await caretakerSetup();
+    const { id } = await mintPet(pets, alice);
+    await pets.connect(alice).authorizeCaretaker(phone.address, until, { value: ethers.parseEther("0.5") });
+    await (await careAs(pets, houses, phone, alice.address, id)).wait();
+
+    await pets.connect(alice).revokeCaretaker(phone.address);
+    await expect(careAs(pets, houses, phone, alice.address, id)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+
+    await pets.connect(alice).authorizeCaretaker(phone.address, until);
+    await time.increaseTo(until + 1n);
+    await expect(careAs(pets, houses, phone, alice.address, id)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+
+    // Verkauf: Berechtigung gehoert Alice, nicht dem Pet
+    const now = BigInt(await time.latest());
+    await pets.connect(alice).authorizeCaretaker(phone.address, now + 86400n);
+    await pets.connect(alice).transferFrom(alice.address, bob.address, id);
+    const h2 = await mintHouse(houses, bob.address);
+    await houses.connect(bob).moveIn(id, h2);
+    await expect(careAs(pets, houses, phone, bob.address, id)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+  });
+
+  it("prueft Parameter (Nulladresse, selbst, Vergangenheit, > 90 Tage)", async () => {
+    const { pets, alice, phone } = await caretakerSetup();
+    const now = BigInt(await time.latest());
+    await expect(pets.connect(alice).authorizeCaretaker(ethers.ZeroAddress, now + 100n)).to.be.revertedWithCustomError(pets, "InvalidCaretaker");
+    await expect(pets.connect(alice).authorizeCaretaker(alice.address, now + 100n)).to.be.revertedWithCustomError(pets, "InvalidCaretaker");
+    await expect(pets.connect(alice).authorizeCaretaker(phone.address, now - 1n)).to.be.revertedWithCustomError(pets, "InvalidExpiry");
+    await expect(pets.connect(alice).authorizeCaretaker(phone.address, now + 91n * 86400n)).to.be.revertedWithCustomError(pets, "InvalidExpiry");
+  });
+});

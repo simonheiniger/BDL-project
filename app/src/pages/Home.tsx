@@ -4,7 +4,8 @@ import { bdl } from "../wagmi";
 import { formatEther } from "viem";
 import { Link } from "react-router-dom";
 import { useContracts } from "../contracts";
-import { useChainQuery, useMyHouses, useMyPets, useTx, loadPet } from "../hooks";
+import { useChainQuery, useMyHouses, useMyPets, usePetHousing, useTx, loadPet, type PetView } from "../hooks";
+import { PhonePanel } from "../components/PhonePanel";
 import { NftCard, TxStatus, tierInfo } from "../components/common";
 
 /** Erste Schritte fuer neue Spieler: MetaMask, Netzwerk hinzufuegen, Test-ETH */
@@ -46,6 +47,26 @@ function Onboarding() {
       </ol>
       {msg && <p className="small">{msg}</p>}
       <p className="muted small">Nur Testnetz-Coins – niemals echtes Geld oder einen echten Wallet-Account verwenden.</p>
+    </div>
+  );
+}
+
+/** Pet-Karte mit Hinweis, ob es in einem Haus wohnt (nur dann pflegbar) */
+function PetEntry({ view }: { view: PetView }) {
+  const { data: housing } = usePetHousing(view.id);
+  return (
+    <div className="petentry">
+      <NftCard view={view} />
+      {housing &&
+        (housing.houseId > 0n ? (
+          <Link className="badge nfc" to={`/house/${housing.houseId}`}>
+            🏠 Haus #{housing.houseId.toString()} · Zufriedenheit {housing.mood}
+          </Link>
+        ) : (
+          <span className="badge" title="Ohne Haus kann ein Pet nicht gepflegt werden">
+            ⛺ Kein Haus – nicht pflegbar
+          </span>
+        ))}
     </div>
   );
 }
@@ -117,7 +138,7 @@ export default function Home() {
       )}
       {views?.length === 0 && houses?.length !== 0 && <p className="muted">Noch keine Pets. Schlüpfe dein erstes!</p>}
       <div className="cards">
-        {views?.map((v) => <NftCard key={v.id.toString()} view={v} />)}
+        {views?.map((v) => <PetEntry key={v.id.toString()} view={v} />)}
       </div>
 
       <div className="row between wrap">
@@ -141,6 +162,8 @@ export default function Home() {
           );
         })}
       </div>
+    
+      <PhonePanel />
     </>
   );
 }

@@ -59,6 +59,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     /// @notice Haeuser (physische NFC-Haeuser). Pets entstehen nur in freien Plaetzen und werden nur nach Scan gepflegt.
     IPetHouse public houses;
 
+    /// @notice Laengste Laufzeit einer Caretaker-Berechtigung
+    uint256 public constant MAX_CARETAKER_TTL = 90 days;
+    /// @notice owner -> caretaker -> Ablaufzeit. Der Caretaker (z.B. Handy-App-Schluessel) darf NUR `interact` aufrufen.
+    ///         An den Besitzer gebunden: nach einem Verkauf hat der Caretaker beim neuen Besitzer keine Rechte.
+    mapping(address => mapping(address => uint64)) public caretakerUntil;
+
     uint256 private _nextId = 1;
     mapping(uint256 => Pet) private _pets;
 
@@ -68,6 +74,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     event Fused(uint256 indexed keepId, uint256 indexed burnId, uint256 newLevel, uint8 fusionCount);
     event Equipped(uint256 indexed petId, uint8 itemId);
     event RendererChanged(address renderer);
+    event CaretakerSet(address indexed owner, address indexed caretaker, uint64 until);
 
     error WrongPayment();
     error NotPetOwner();
@@ -79,6 +86,9 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     error AlreadyConfigured();
     error ItemNotOwned();
     error HousesNotSet();
+    error InvalidCaretaker();
+    error InvalidExpiry();
+    error FundingFailed();
 
     constructor(
         IERC6551Registry registry_,
@@ -161,12 +171,38 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         return _nextId - 1;
     }
 
+    // ------------------------------------------------------------------ Caretaker (Handy-App)
+
+    /// @notice Einen Schluessel (z.B. aus der Handy-App) bis `until` zum Pflegen aller eigenen Pets berechtigen.
+    ///         Er darf nur `interact` aufrufen – nie uebertragen, verkaufen, fusionieren oder Items bewegen.
+    ///         Gesendetes ETH geht direkt an den Caretaker (Gas fuer die Pflege-Transaktionen).
+    function authorizeCaretaker(address caretaker, uint64 until) external payable {
+        if (caretaker == address(0) || caretaker == msg.sender) revert InvalidCaretaker();
+        if (until <= block.timestamp || until > block.timestamp + MAX_CARETAKER_TTL) revert InvalidExpiry();
+        caretakerUntil[msg.sender][caretaker] = until;
+        emit CaretakerSet(msg.sender, caretaker, until);
+        if (msg.value > 0) {
+            (bool ok, ) = payable(caretaker).call{value: msg.value}("");
+            if (!ok) revert FundingFailed();
+        }
+    }
+
+    function revokeCaretaker(address caretaker) external {
+        delete caretakerUntil[msg.sender][caretaker];
+        emit CaretakerSet(msg.sender, caretaker, 0);
+    }
+
+    function isCaretaker(address owner_, address who) public view returns (bool) {
+        return caretakerUntil[owner_][who] > block.timestamp;
+    }
+
     // ------------------------------------------------------------------ Pflege-Loop
 
     /// @notice Pflegen: +20 XP (skaliert mit Zufriedenheit), zaehlt fuer den Fokus-Stat des naechsten Level-Ups.
     /// @param expiry/sig Scan-Beweis: Signatur des NFC-Chips vom Haus, in dem das Pet wohnt (siehe PetHouse.scan)
     function interact(uint256 petId, Action action, uint256 expiry, bytes calldata sig) external {
-        if (ownerOf(petId) != msg.sender) revert NotPetOwner();
+        address petOwner = ownerOf(petId);
+        if (petOwner != msg.sender && !isCaretaker(petOwner, msg.sender)) revert NotPetOwner();
         Pet storage p = _pets[petId];
         if (p.level >= GameMath.MAX_LEVEL) revert MaxLevel();
         if (block.timestamp < p.lastAction + cooldown) revert Cooldown();
@@ -179,7 +215,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
         // NFC-Scan zwingend. Zufriedenheit (vor dieser Pflege) skaliert den XP-Ertrag: <50 -> 50..100 %, sonst 100 %.
         // Bessere Haeuser geben nie mehr als 100 %, sie halten nur laenger zufrieden (kein Pay-to-Win).
-        uint256 mood = houses.scan(petId, msg.sender, expiry, sig);
+        uint256 mood = houses.scan(petId, petOwner, expiry, sig);
         uint256 gain = XP_PER_ACTION * (mood >= 50 ? 100 : 50 + mood) / 100;
 
         p.actionsToday++;

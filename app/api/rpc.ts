@@ -27,8 +27,18 @@ const MAX_BATCH = 50;
 
 type RpcReq = { jsonrpc?: string; id?: unknown; method?: string; params?: unknown };
 
+// Handy-App (Capacitor, Android) hat die Origin https://localhost
+const CORS = {
+  "access-control-allow-origin": "https://localhost",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...CORS } });
+
+export function OPTIONS(): Response {
+  return new Response(null, { status: 204, headers: CORS });
+}
 
 export async function POST(request: Request): Promise<Response> {
   const text = await request.text();
@@ -54,7 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     return new Response(await upstream.text(), {
       status: upstream.status,
-      headers: { "content-type": "application/json", "cache-control": "no-store" },
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
     });
   } catch (e) {
     return json({ error: `upstream unreachable: ${(e as Error).message}` }, 502);

@@ -128,3 +128,25 @@ Wallet und Transaktionen bleiben am PC, das Handy scannt nur den Chip und signie
 
 Der Relay sieht nur Anfrage und Signatur (an Spieler/Nonce gebunden, ≤ 1 h gültig). Die Pairing-ID (128 bit) steht nur im QR-Code.
 `api/relay.ts` braucht auf Vercel einen Redis-Store: Upstash-Integration (`UPSTASH_REDIS_REST_URL`/`_TOKEN`) oder Vercel KV (`KV_REST_API_URL`/`_TOKEN`). Ohne Env läuft ein In-Memory-Store (nur `npm run dev`; auf Serverless unzuverlässig).
+
+## Handy-App (Companion, Android)
+
+Die App ist nur zum Pflegen/Füttern. Verkaufen, Fusion, Arena, Häuser verwalten bleiben am PC.
+
+**Anmeldung (einmal pro Monat):**
+1. PC: Startseite oder Hausseite → „Handy koppeln“ → QR-Code. Handy-Kamera scannt ihn, die App öffnet sich und zeigt einen 4-stelligen Code.
+2. PC: zeigt denselben Code → Codes vergleichen → „Handy freigeben“ (eine MetaMask-Bestätigung, schickt etwas Test-ETH als Gas mit).
+3. Das ruft `PetNFT.authorizeCaretaker(handyAdresse, +30 Tage)` auf. Der Handy-Schlüssel (in der App erzeugt, nicht die Haupt-Wallet) darf **nur** `interact` aufrufen. Er läuft nach 30 Tagen ab, ist widerrufbar („Freigabe widerrufen“) und gilt nur für den berechtigenden Besitzer (nach einem Verkauf wertlos).
+
+**Pflegen:** NFC-Chip des Hauses ans Handy halten (öffnet die App über den Link `https://<app>/house/<id>#k=…`), dann in der App füttern/trainieren. Das Handy signiert den Scan mit dem Chip-Schlüssel und sendet die Transaktion selbst. Der PC listet alle Tiere und zeigt, welche in einem Haus wohnen (nur diese sind pflegbar).
+
+**APK bauen** (Android SDK + JDK 17, Capacitor 6):
+```
+cd app
+APP_URL=https://<deine-vercel-domain> npm run native:build   # Web-App bauen, Android-Projekt synchronisieren, App-Link eintragen
+npm run native:apk                                            # android/app/build/outputs/apk/debug/app-debug.apk
+```
+`APP_URL` ist die Domain der PC-App (Relay `/api/relay` und Lese-Proxy `/api/rpc`); dieselbe Domain steht auch in den Chip-URLs (`APP_URL` beim Haus-Minten). Pflege-Transaktionen gehen direkt an die Kurs-RPC (`VITE_BDL_RPC_URL`, http – in der App erlaubt).
+Damit ein Chip-Scan die App ohne Auswahldialog öffnet, muss `https://<domain>/.well-known/assetlinks.json` den SHA-256-Fingerabdruck des APK-Zertifikats enthalten (Digital Asset Links, Paket `ch.zhaw.bdl.pets`); ohne das fragt Android einmalig „Öffnen mit“.
+
+**Contracts neu deployen** (neue Funktionen `authorizeCaretaker`/`revokeCaretaker` in `PetNFT`): `npx hardhat run scripts/deploy.ts --network bdl`. Integrationstest des Handy-Wegs gegen einen lokalen Node: `npx hardhat node`, deploy mit `--network localhost`, dann `cd app && npx tsx scripts/e2e-caretaker.ts`.

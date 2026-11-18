@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Address, Hex } from "viem";
+import { API_BASE } from "./native";
 
 /**
  * PC <-> Handy-Kopplung. Der PC (Wallet) erzeugt eine Pairing-ID und zeigt sie als QR-Code. Das Handy scannt den
@@ -56,31 +57,32 @@ export function usePair(which: "pc" | "phone") {
 }
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(`${API_BASE}/api/relay`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = (await r.json().catch(() => ({}))) as T & { error?: string };
   if (!r.ok) throw new Error(j.error ?? `Relay ${r.status}`);
   return j;
 }
 
 // ---- PC-Seite ----------------------------------------------------------------------------------------------------
-export type PhoneStatus = { online: boolean; houses: number[] };
+export type PhoneStatus = { online: boolean; houses: number[]; caretaker: Address | null };
 
+const OFFLINE: PhoneStatus = { online: false, houses: [], caretaker: null };
 export const phoneStatus = (pair: string) => call<PhoneStatus>({ a: "status", pair });
 
 /** Reaktiv: ist das Handy online und welche Haeuser hat es gescannt? */
 export function usePhoneStatus(): PhoneStatus & { paired: boolean } {
   const pair = usePair("pc");
-  const [s, setS] = useState<PhoneStatus>({ online: false, houses: [] });
+  const [s, setS] = useState<PhoneStatus>(OFFLINE);
   useEffect(() => {
     if (!pair) {
-      setS({ online: false, houses: [] });
+      setS(OFFLINE);
       return;
     }
     let alive = true;
     const poll = () =>
       phoneStatus(pair)
         .then((v) => alive && setS(v))
-        .catch(() => alive && setS({ online: false, houses: [] }));
+        .catch(() => alive && setS(OFFLINE));
     poll();
     const t = setInterval(poll, 3000);
     return () => {
@@ -119,3 +121,6 @@ export const phoneHello = (pair: string, houses: number[]) => call({ a: "hello",
 export const phoneNext = (pair: string) => call<{ req: { id: string; payload: string } | null }>({ a: "next", pair });
 export const phoneRespond = (pair: string, id: string, sig: Hex, expiry: bigint) =>
   call({ a: "res", pair, id, sig, expiry: expiry.toString() });
+
+/** Handy-App meldet die Adresse ihres Caretaker-Schluessels (der PC zeigt sie zur Freigabe an) */
+export const phoneRegister = (pair: string, address: Address) => call({ a: "register", pair, address });

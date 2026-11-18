@@ -14,6 +14,8 @@ import NfcSetup from "./pages/NfcSetup";
 import PhonePage, { PhoneSigner } from "./pages/Phone";
 import { getPhonePair } from "./relay";
 import { hasWallet, isMobile, metamaskLink } from "./nfc";
+import Companion from "./companion/Companion";
+import { isNative } from "./native";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -101,6 +103,7 @@ function ChainGuard() {
 }
 
 export default function App() {
+  if (isNative) return <Companion />;
   return (
     <div className="app">
       <header>
