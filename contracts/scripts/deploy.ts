@@ -58,6 +58,11 @@ async function main() {
   await (await (pets as any).setGameContracts(await cosmetics.getAddress(), await trophy.getAddress())).wait();
   await (await (houses as any).setPets(await pets.getAddress())).wait();
   await (await (pets as any).setHouses(await houses.getAddress())).wait();
+  // Optional: weitere Haus-Minter (z.B. Teampartner), kommagetrennt. Spaeter auch ueber /admin verwaltbar.
+  for (const m of (process.env.HOUSE_MINTERS ?? "").split(",").map((x) => x.trim()).filter(Boolean)) {
+    await (await (houses as any).setMinter(m, true)).wait();
+    console.log("  Haus-Minter:", m);
+  }
   // Minispiele: Gutscheine signiert der Spiele-Server (GAME_ADDRESS = eigener Key, nie der Deploy-Key)
   const games = await deploy("PetGames", [await pets.getAddress(), gameSigner]);
   await (await (pets as any).setGames(await games.getAddress())).wait();

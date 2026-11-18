@@ -9,8 +9,8 @@ import { TxStatus, short, tierInfo } from "../components/common";
 import { chipUrl, newChip, writeLink } from "../nfc";
 
 /**
- * Entwickler-Tool: Haeuser definieren (Stufe, Besitzer) und Chips vorbereiten. Nur der Owner von PetHouse darf
- * `mintHouse` aufrufen – das erzwingt der Contract; diese Seite blendet fuer alle anderen nur die Uebersicht ein.
+ * Entwickler-Tool: Haeuser definieren (Stufe, Besitzer) und Chips vorbereiten. `mintHouse` duerfen nur der Owner von
+ * PetHouse und von ihm ernannte Minter aufrufen – das erzwingt der Contract; alle anderen sehen nur die Uebersicht.
  * Chip-Schluessel entstehen hier im Browser und bleiben auf diesem PC (localStorage), bis der Chip beschrieben ist.
  */
 const KEY = "bdl.admin.chips";
@@ -83,6 +83,7 @@ export default function Admin() {
   const [to, setTo] = useState("");
   const [pending, setPending] = useState<Pending[]>(load);
   const [busy, setBusy] = useState(false);
+  const [minterInput, setMinterInput] = useState("");
 
   const { data: owner } = useChainQuery(
     ["houseOwner"],
@@ -94,7 +95,19 @@ export default function Admin() {
     return list.filter((h) => !!h);
   });
 
-  const isDev = !!address && !!owner && address.toLowerCase() === owner.toLowerCase();
+  // Aktuelle Minter aus den MinterSet-Events rekonstruieren (letztes Event pro Adresse gilt)
+  const { data: minters } = useChainQuery(["houseMinters"], async (pc, c) => {
+    const logs = await pc.getContractEvents({ ...c.PetHouse, eventName: "MinterSet", fromBlock: 0n });
+    const state = new Map<string, boolean>();
+    for (const l of logs) {
+      const a = l.args as { minter: Address; allowed: boolean };
+      state.set(a.minter, a.allowed);
+    }
+    return [...state].filter(([, ok]) => ok).map(([m]) => m as Address);
+  });
+
+  const isOwner = !!address && !!owner && address.toLowerCase() === owner.toLowerCase();
+  const isDev = isOwner || (!!address && !!minters?.some((m) => m.toLowerCase() === address.toLowerCase()));
   const recipient = (to || address || "") as string;
   const recipientOk = isAddress(recipient);
   const mine = pending.filter((p) => p.chain === chainId);
@@ -150,8 +163,8 @@ export default function Admin() {
       {!address && <p className="card warn">Wallet verbinden (Entwickler-Account).</p>}
       {address && !isDev && (
         <p className="card warn">
-          Nur der Entwickler ({owner ? short(owner) : "…"}) kann Häuser definieren. Dein Account {short(address)} ist es nicht. Die
-          Übersicht unten ist öffentlich.
+          Nur der Entwickler ({owner ? short(owner) : "…"}) und von ihm freigeschaltete Minter können Häuser definieren. Dein Account{" "}
+          {short(address)} ist keiner davon. Die Übersicht unten ist öffentlich.
         </p>
       )}
 
@@ -182,6 +195,40 @@ export default function Admin() {
             🏠 Häuser prägen
           </button>
           {!recipientOk && <p className="small warn-text">Ungültige Besitzer-Adresse.</p>}
+        </section>
+      )}
+
+      {isOwner && (
+        <section className="card">
+          <h3>Minter</h3>
+          <p className="muted small">Minter dürfen Häuser prägen, aber keine weiteren Minter ernennen.</p>
+          {minters?.length === 0 && <p className="muted small">Noch keine.</p>}
+          {minters?.map((m) => (
+            <p key={m} className="row small">
+              {m}
+              <button
+                className="btn small"
+                disabled={!!tx.pending}
+                onClick={() => tx.send(`Minter ${short(m)} entfernen`, { ...c.PetHouse, functionName: "setMinter", args: [m, false] })}
+              >
+                Entfernen
+              </button>
+            </p>
+          ))}
+          <label className="row small">
+            Adresse
+            <input value={minterInput} onChange={(e) => setMinterInput(e.target.value.trim())} placeholder="0x…" style={{ width: "22rem", maxWidth: "100%" }} />
+          </label>
+          <button
+            className="btn"
+            disabled={!!tx.pending || !isAddress(minterInput)}
+            onClick={async () => {
+              if (await tx.send(`Minter ${short(minterInput)} hinzufügen`, { ...c.PetHouse, functionName: "setMinter", args: [minterInput, true] }))
+                setMinterInput("");
+            }}
+          >
+            ➕ Minter hinzufügen
+          </button>
         </section>
       )}
 

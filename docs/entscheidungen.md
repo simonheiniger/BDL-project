@@ -50,6 +50,7 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Reentrancy? | `fuse`, `reveal`, `buy`, `withdraw` mit `nonReentrant`; Zahlungen als Pull-Payment (ausser Preisgeld ins TBA, unser eigener Contract). |
 | Warum Stats-Snapshot beim Join? | Sonst könnte man nach der Anmeldung noch leveln/fusionieren. Verbrannte Pets zählen beim Reveal mit Power 0. |
 | Warum Preisgeld ins TBA statt an den Spieler? | Gewinn gehört zum Pet und steigert dessen Handelswert. Owner kann jederzeit via `execute` auszahlen. |
+| Wer darf Häuser prägen? | Owner von PetHouse plus von ihm ernannte Minter (`setMinter`). Mehrere Personen müssen Häuser für gedruckte Chips prägen können, ohne den Deploy-Key zu teilen. Minter können keine weiteren Minter ernennen und lassen sich jederzeit entziehen. Bewusst kein `AccessControl`: eine Rolle, ein Mapping, weniger Bytecode. |
 | Warum `evmVersion: paris`? | Kein PUSH0-Opcode → läuft sicher auch auf älteren Hardhat-Nodes wie dem Kurs-Testnetz. |
 
 ## Zufall
