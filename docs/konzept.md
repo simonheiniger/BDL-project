@@ -35,20 +35,31 @@ echten Zeitinvestment – das ist, was hohe Level handelswert macht. Exponent is
 ### 1.2b Minispiele: Leveln ohne Transaktion pro Aktion
 
 Neben der Pflege im Haus (NFC-Scan, eine Transaktion pro Aktion) gibt es **Minispiele** in der App:
-🧠 Memory, ❓ Blockchain-Quiz (Fragen aus dem BDL-Kurs), 🏃 Hürdenlauf.
+🧠 Memory, ❓ Blockchain-Quiz (Fragen aus dem BDL-Kurs), 🏃 Hürdenlauf, 🪽 Flappy-Pet, 🎵 Simon Says,
+🧩 Schiebe-Puzzle (mit dem eigenen Pet-Bild) und ⛏️ Hash-Rätsel (Mini-Proof-of-Work).
 
 ```
 Browser spielt (off-chain, gratis) ──Ergebnis──► api/game.ts prüft ──► signierter XP-Gutschein (EIP-712)
 Gutscheine sammeln ──► PetGames.claim(gutscheine[], signaturen[])  = EINE Transaktion für beliebig viele Runden
 ```
 
-- **Server prüft, Browser nicht:** Memory-Züge und Sprung-Zeitpunkte werden mit demselben Code (`app/api/_games.ts`)
+- **Server prüft, Browser nicht:** Memory-Züge, Sprung-/Flügelschlag-Zeitpunkte, Simon-Eingaben, Puzzle-Züge und Nonces werden mit demselben Code (`app/api/_games.ts`)
   nachgespielt; die Quiz-Lösungen kennt nur der Server, die Antwortreihenfolge wird pro Runde gemischt.
 - **Runden-Token** ist mit AES-256-GCM verschlüsselt: zustandslos, fälschungssicher, Seed bleibt geheim.
 - **On-chain-Grenzen (`PetGames`):** jeder Gutschein nur einmal (Nonce), max. 40 XP pro Gutschein, **max. 200 Spiel-XP
   pro Pet und Tag** (≈ 10 Pflege-Aktionen) → Spiele ergänzen die Pflege, ersetzen sie nicht. Über dem Limit wird gekappt.
-- XP: Memory 40 − 2 × Fehlversuche (min. 10) · Quiz 8 pro richtige Antwort · Rennen 5 + Strecke (max. 40).
-- Memory und Quiz zahlen auf den INT-Fokus ein, das Rennen auf AGI.
+- XP: Memory 40 − 2 × Fehlversuche (min. 10) · Quiz 8 pro richtige Antwort · Rennen 5 + Strecke (max. 40) ·
+  Flappy 4 + 3 pro Röhre · Simon 4 pro Runde · Puzzle 40 − 1 pro 5 Züge über 30 (min. 10) · Hash 13 pro Block, 40 für die ganze Kette.
+- **Flappy-Physik in Ganzzahlen** (Höhe 0–1000, Schwerkraft 4/Tick): Gleitkomma kann zwischen Browser und Server minimal
+  abweichen, dann wäre eine knappe Runde im Browser geschafft und auf dem Server ein Absturz. Eine vollständige Suche über alle
+  Flügelschlag-Folgen zeigt: jede erzeugte Röhrenfolge ist schaffbar (Lückenmitte springt pro Röhre höchstens ±220).
+- **Puzzle** wird durch zufällige *gültige* Züge ab dem gelösten Bild gemischt → immer lösbar (die Hälfte aller zufälligen
+  3×3-Anordnungen wäre unlösbar).
+- **Hash-Rätsel = Kursstoff zum Anfassen:** Block = `#i | prev=<Hash Vorgänger> | tx | nonce`, gültig wenn
+  `keccak256` mit `0x0` beginnt (Schwierigkeit 1 Hex-Ziffer ≈ 16 Versuche). Ändert man Block 1, werden 2 und 3 ungültig –
+  genau die Verkettung, die eine Blockchain manipulationssicher macht.
+- Memory, Quiz und die neuen Spiele zahlen auf den INT-Fokus ein, das Rennen auf AGI (fest im Contract:
+  `kind == 2 ? AGI : INT`; Flappy wäre eigentlich AGI – dafür müsste PetGames neu deployt werden).
 
 ### 1.3 Turnier: gewichteter Zufall
 

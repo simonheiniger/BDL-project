@@ -87,6 +87,10 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Warum nicht die Punktzahl des Browsers glauben? | Der Browser ist manipulierbar. Der Server spielt Memory-Züge und Sprünge mit demselben Code nach und kennt die Quiz-Lösungen allein. |
 | Kann man trotzdem schummeln? | Teilweise: Das Memory-Layout ist im Browser sichtbar, ein Bot könnte das Rennen perfekt spielen, Quiz-Antworten kann man nachschlagen. Darum begrenzt der Contract den Schaden (200 XP pro Pet und Tag, 40 pro Gutschein). |
 | Warum ein verschlüsseltes Token statt Datenbank? | Zustandslos (keine DB nötig) und trotzdem fälschungssicher. Doppeltes Einlösen verhindert der Contract über die Nonce. |
+| Warum Ganzzahl-Physik bei Flappy-Pet? | Browser und Server müssen bitgleich rechnen. Gleitkomma kann je nach Engine/Reihenfolge minimal abweichen → eine knappe Runde wäre im Browser geschafft, auf dem Server ein Absturz. |
+| Warum das Hash-Rätsel? | Proof-of-Work aus dem Kurs zum Ausprobieren: Nonce suchen, bis der Hash mit `0x0` beginnt; jeder Block enthält den Hash des Vorgängers. Ein Bot kann hier nur „schummeln“, indem er wirklich mined – das ist PoW. |
+| Warum wird das Puzzle mit Zügen gemischt statt zufällig angeordnet? | Die Hälfte aller zufälligen 3×3-Anordnungen ist unlösbar (Paritätsargument). Rückwärts von der Lösung gemischt ist immer lösbar. |
+| Warum neue Spiele ohne Contract-Änderung? | `kind` im Gutschein ist ein `uint8`; der Contract kennt nur „Rennen = AGI, Rest = INT“. Neue Spiele hängen hinten an die Liste an (alte Gutscheine behalten ihre Bedeutung). |
 | Vertrauensannahme? | Der Spiele-Server ist ein Orakel wie der Check-in-Service: Wer den Key hat, kann Gutscheine erzeugen. Eigener Key (`GAME_PRIVATE_KEY`), nicht der Deploy-Key; Tageslimit begrenzt den Schaden. |
 
 ## Geofencing

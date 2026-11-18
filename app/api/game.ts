@@ -8,7 +8,30 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { keccak256, toBytes, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { GAME_KINDS, memoryLayout, memoryResult, quizRound, QUIZ, quizResult, raceObstacles, raceResult, RACE, type GameKind } from "./_games.js";
+import {
+  GAME_KINDS,
+  memoryLayout,
+  memoryResult,
+  quizRound,
+  QUIZ,
+  quizResult,
+  raceObstacles,
+  raceResult,
+  RACE,
+  FLAPPY,
+  flappyPipes,
+  flappyResult,
+  simonSequence,
+  simonResult,
+  simonMinMs,
+  PUZZLE,
+  puzzleBoard,
+  puzzleResult,
+  HASH,
+  hashTxs,
+  hashResult,
+  type GameKind,
+} from "./_games.js";
 
 // Lokal (Hardhat): oeffentlicher Test-Key #6. Auf Vercel MUSS GAME_PRIVATE_KEY gesetzt sein.
 const DEV_KEY = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
@@ -17,7 +40,6 @@ const RAW = (process.env.GAME_PRIVATE_KEY ?? (process.env.VERCEL ? "" : DEV_KEY)
 const KEY = (RAW && !RAW.startsWith("0x") ? `0x${RAW}` : RAW) as `0x${string}`;
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const VOUCHER_TTL_S = 7 * 24 * 3600;
-const MIN_MS: Record<GameKind, number> = { memory: 8000, quiz: 10000, race: 0 };
 
 const deployments = JSON.parse(readFileSync(new URL("../src/contracts/deployments.json", import.meta.url), "utf8"));
 
@@ -81,13 +103,18 @@ async function handle(request: Request): Promise<Response> {
     };
     // Spieldaten fuer den Browser: Memory-Layout ist sichtbar (Schummeln moeglich -> Tageslimit begrenzt Schaden),
     // Quiz-Loesungen bleiben auf dem Server, das Rennen wird nachsimuliert.
-    const data =
-      kind === "memory"
-        ? { layout: memoryLayout(r.seed) }
-        : kind === "quiz"
-          ? { questions: quizRound(r.seed).map(({ id, order }) => ({ q: QUIZ[id].q, options: order.map((k) => QUIZ[id].options[k]) })) }
-          : { obstacles: raceObstacles(r.seed), ...RACE };
-    return json({ token: seal(r), kind, data });
+    // Simon: ganze Folge geht mit (wie Memory-Layout) -> Tageslimit + Mindestzeit begrenzen Bots.
+    // Hash: Bots "schummeln" hier nur, indem sie echt minen – genau das ist Proof-of-Work.
+    const data: Record<GameKind, () => unknown> = {
+      memory: () => ({ layout: memoryLayout(r.seed) }),
+      quiz: () => ({ questions: quizRound(r.seed).map(({ id, order }) => ({ q: QUIZ[id].q, options: order.map((k) => QUIZ[id].options[k]) })) }),
+      race: () => ({ obstacles: raceObstacles(r.seed), ...RACE }),
+      flappy: () => ({ pipes: flappyPipes(r.seed) }),
+      simon: () => ({ sequence: simonSequence(r.seed) }),
+      puzzle: () => ({ board: puzzleBoard(r.seed) }),
+      hash: () => ({ txs: hashTxs(r.seed) }),
+    };
+    return json({ token: seal(r), kind, data: data[kind]() });
   }
 
   if (body.op === "finish") {
@@ -95,10 +122,26 @@ async function handle(request: Request): Promise<Response> {
     if (!r) return json({ error: "Runde ungueltig oder abgelaufen" }, 400);
     const elapsed = Date.now() - r.iat;
     const answer = body.answer as never;
-    const res =
-      r.kind === "memory" ? memoryResult(r.seed, answer) : r.kind === "quiz" ? quizResult(r.seed, answer) : raceResult(r.seed, answer);
-    // Plausibilitaet: nicht schneller als ein Mensch (Rennen: Spieldauer in Echtzeit)
-    const minMs = r.kind === "race" ? ("ticks" in res ? res.ticks * RACE.tickMs * 0.9 : 0) : MIN_MS[r.kind];
+    // Server spielt die Eingaben selbst nach; dazu je eine Mindestdauer, die ein Mensch sicher braucht
+    const check: Record<GameKind, () => { res: { ok: boolean; xp: number }; minMs: number }> = {
+      memory: () => ({ res: memoryResult(r.seed, answer), minMs: 8000 }),
+      quiz: () => ({ res: quizResult(r.seed, answer), minMs: 10000 }),
+      race: () => {
+        const res = raceResult(r.seed, answer);
+        return { res, minMs: res.ticks * RACE.tickMs * 0.9 };
+      },
+      flappy: () => {
+        const res = flappyResult(r.seed, answer);
+        return { res, minMs: res.ticks * FLAPPY.tickMs * 0.9 };
+      },
+      simon: () => {
+        const res = simonResult(r.seed, answer);
+        return { res, minMs: simonMinMs(res.rounds) };
+      },
+      puzzle: () => ({ res: puzzleResult(r.seed, answer), minMs: PUZZLE.minMs }),
+      hash: () => ({ res: hashResult(r.seed, answer), minMs: HASH.minMs }),
+    };
+    const { res, minMs } = check[r.kind]();
     if (elapsed < minMs) return json({ error: "zu schnell – Runde ungueltig" }, 400);
     if (!res.ok || res.xp <= 0) return json({ result: res, voucher: null });
 

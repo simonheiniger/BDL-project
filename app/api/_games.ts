@@ -1,9 +1,12 @@
 // Spiellogik fuer die Minispiele – identisch im Browser (Spielen) und auf dem Server (Pruefen).
 // Der Server vertraut nie einer vom Browser gemeldeten Punktzahl: Er spielt die Eingaben (Kartenzuege,
 // Antworten, Sprung-Zeitpunkte) mit demselben Code nach und berechnet die XP selbst.
-// Bewusst ohne Node-/Browser-Abhaengigkeiten.
+// Bewusst ohne Node-/Browser-Abhaengigkeiten (nur viem fuer keccak256, laeuft in beiden).
 
-export const GAME_KINDS = ["memory", "quiz", "race"] as const;
+import { keccak256, toBytes } from "viem";
+
+// Reihenfolge = `kind` im Gutschein (PetGames). Nur hinten anfuegen, sonst aendern alte Gutscheine ihre Bedeutung.
+export const GAME_KINDS = ["memory", "quiz", "race", "flappy", "simon", "puzzle", "hash"] as const;
 export type GameKind = (typeof GAME_KINDS)[number];
 export const MAX_XP = 40; // = PetGames.MAX_XP_PER_VOUCHER
 
@@ -140,4 +143,171 @@ export function raceSimulate(seed: string, jumps: number[]) {
 export function raceResult(seed: string, jumps: number[]) {
   const s = raceSimulate(seed, jumps);
   return { ok: true, ticks: s.ticks, crashed: s.crashed, xp: Math.min(MAX_XP, 5 + Math.floor(s.ticks / 17)) };
+}
+
+// ------------------------------------------------------------------ Flappy-Pet (ganzzahlige Physik -> Browser und Server rechnen bitgleich)
+
+export const FLAPPY = {
+  tickMs: 40,
+  maxTicks: 750, // 30 s
+  height: 1000, // Spielfeldhoehe in Einheiten (0 = oben)
+  gravity: 4,
+  flap: -38, // Geschwindigkeit nach einem Fluegelschlag
+  maxFall: 40,
+  gapHalf: 200, // halbe Lueckenhoehe
+  r: 45, // Trefferradius des Pets
+  pipeHalf: 3, // Ticks, die eine Roehre das Pet ueberdeckt (vor/nach)
+  firstPipe: 60,
+};
+
+export type FlappyPipe = { t: number; g: number }; // t = Tick, an dem die Roehre beim Pet ist; g = Lueckenmitte
+
+/** Roehren aus dem Seed. Sprung der Lueckenmitte begrenzt -> immer schaffbar (siehe Bot-Test). */
+export function flappyPipes(seed: string): FlappyPipe[] {
+  const r = rng(seed);
+  const out: FlappyPipe[] = [];
+  let g = 500;
+  for (let t = FLAPPY.firstPipe; t < FLAPPY.maxTicks; t += 38 + Math.floor(r() * 14)) {
+    g = Math.max(260, Math.min(740, g + Math.floor((r() - 0.5) * 440)));
+    out.push({ t, g });
+  }
+  return out;
+}
+
+export type FlappyState = { y: number; vy: number };
+export const flappyStart = (): FlappyState => ({ y: 500, vy: 0 });
+
+/** Ein Tick. Gibt true zurueck, wenn das Pet in diesem Tick aufprallt. */
+export function flappyStep(s: FlappyState, flap: boolean, t: number, pipes: FlappyPipe[]): boolean {
+  s.vy = flap ? FLAPPY.flap : Math.min(s.vy + FLAPPY.gravity, FLAPPY.maxFall);
+  s.y += s.vy;
+  if (s.y < FLAPPY.r || s.y > FLAPPY.height - FLAPPY.r) return true;
+  for (const p of pipes) {
+    if (Math.abs(t - p.t) <= FLAPPY.pipeHalf && Math.abs(s.y - p.g) > FLAPPY.gapHalf - FLAPPY.r) return true;
+  }
+  return false;
+}
+
+export function flappySimulate(seed: string, flaps: number[]) {
+  const pipes = flappyPipes(seed);
+  const set = new Set(flaps.filter((f) => Number.isInteger(f) && f >= 0 && f < FLAPPY.maxTicks));
+  const s = flappyStart();
+  let t = 0;
+  for (; t < FLAPPY.maxTicks; t++) if (flappyStep(s, set.has(t), t, pipes)) break;
+  const passed = pipes.filter((p) => p.t + FLAPPY.pipeHalf < t).length;
+  return { ticks: t, crashed: t < FLAPPY.maxTicks, passed };
+}
+
+export function flappyResult(seed: string, flaps: number[]) {
+  if (!Array.isArray(flaps) || flaps.length > FLAPPY.maxTicks) return { ok: false, ticks: 0, passed: 0, xp: 0 };
+  const s = flappySimulate(seed, flaps);
+  return { ok: s.passed > 0, ticks: s.ticks, passed: s.passed, xp: Math.min(MAX_XP, 4 + s.passed * 3) };
+}
+
+// ------------------------------------------------------------------ Simon Says
+
+export const SIMON = { colors: 4, maxLen: 12, stepMs: 550 };
+
+export function simonSequence(seed: string): number[] {
+  const r = rng(seed);
+  return Array.from({ length: SIMON.maxLen }, () => Math.floor(r() * SIMON.colors));
+}
+
+/** `attempts[k]` = Eingabe in Runde k+1 (Laenge k+1). Gezaehlt werden lueckenlos richtige Runden. */
+export function simonResult(seed: string, attempts: number[][]) {
+  const seq = simonSequence(seed);
+  let rounds = 0;
+  if (Array.isArray(attempts)) {
+    for (const a of attempts.slice(0, SIMON.maxLen)) {
+      if (!Array.isArray(a) || a.length !== rounds + 1 || a.some((x, i) => x !== seq[i])) break;
+      rounds++;
+    }
+  }
+  return { ok: rounds > 0, rounds, xp: Math.min(MAX_XP, rounds * 4) };
+}
+
+/** Zeit, die allein das Vorspielen der geschafften Runden dauert (Plausibilitaet) */
+export const simonMinMs = (rounds: number) => ((rounds * (rounds + 1)) / 2) * SIMON.stepMs * 0.8;
+
+// ------------------------------------------------------------------ Schiebe-Puzzle 3x3 (8 = Luecke)
+
+const PUZZLE_N = 3;
+const BLANK = PUZZLE_N * PUZZLE_N - 1;
+export const PUZZLE = { n: PUZZLE_N, maxMoves: 500, minMs: 15000 };
+
+const neighbours = (i: number) =>
+  [i - PUZZLE_N, i + PUZZLE_N, i % PUZZLE_N ? i - 1 : -1, (i + 1) % PUZZLE_N ? i + 1 : -1].filter((j) => j >= 0 && j <= BLANK);
+
+const solved = (b: number[]) => b.every((v, i) => v === i);
+
+/** Mischen durch zufaellige GUELTIGE Zuege ab dem geloesten Bild -> garantiert loesbar */
+export function puzzleBoard(seed: string): number[] {
+  const r = rng(seed);
+  const b = [...Array(BLANK + 1).keys()];
+  let blank = BLANK;
+  let prev = -1;
+  for (let k = 0; k < 80 || solved(b); k++) {
+    const opts = neighbours(blank).filter((j) => j !== prev);
+    const j = opts[Math.floor(r() * opts.length)];
+    [b[blank], b[j]] = [b[j], b[blank]];
+    prev = blank;
+    blank = j;
+  }
+  return b;
+}
+
+/** Einen Zug ausfuehren: `pos` = Feld des Teils, das in die Luecke rutscht. false = ungueltig. */
+export function puzzleMove(b: number[], pos: number): boolean {
+  const blank = b.indexOf(BLANK);
+  if (!neighbours(blank).includes(pos)) return false;
+  [b[blank], b[pos]] = [b[pos], b[blank]];
+  return true;
+}
+
+export function puzzleResult(seed: string, moves: number[]) {
+  const b = puzzleBoard(seed);
+  if (!Array.isArray(moves) || moves.length > PUZZLE.maxMoves) return { ok: false, moves: 0, xp: 0 };
+  for (const m of moves) if (!puzzleMove(b, m)) return { ok: false, moves: moves.length, xp: 0 };
+  const ok = solved(b);
+  // Optimum liegt bei <= 31 Zuegen; pro 5 Zuege darueber 1 XP weniger, mindestens 10
+  return { ok, moves: moves.length, xp: ok ? Math.max(10, Math.min(MAX_XP, MAX_XP - Math.floor((moves.length - 30) / 5))) : 0 };
+}
+
+// ------------------------------------------------------------------ Hash-Raetsel: Mini-Proof-of-Work
+
+export const HASH = { blocks: 3, prefix: "0x0", minMs: 12000, maxNonce: 1_000_000 };
+const PEOPLE = ["Alice", "Bob", "Carol", "Dave", "Eve", "Noel", "Simon", "Mallory"];
+
+/** Pro Block eine Transaktion aus dem Seed */
+export function hashTxs(seed: string): string[] {
+  const r = rng(seed);
+  return Array.from({ length: HASH.blocks }, () => {
+    const a = PEOPLE[Math.floor(r() * PEOPLE.length)];
+    let b = PEOPLE[Math.floor(r() * PEOPLE.length)];
+    if (b === a) b = PEOPLE[(PEOPLE.indexOf(a) + 1) % PEOPLE.length];
+    return `${a} -> ${b}: ${1 + Math.floor(r() * 9)} ETH`;
+  });
+}
+
+/** Block-Inhalt: Nummer, Hash des Vorgaengers (Verkettung!), Transaktion, Nonce */
+export const hashBlockText = (i: number, prev: string, tx: string, nonce: number) => `#${i + 1}|prev=${prev}|tx=${tx}|nonce=${nonce}`;
+export const blockHash = (text: string) => keccak256(toBytes(text));
+export const GENESIS = "0x" + "0".repeat(64);
+
+/** Gueltig = Hash beginnt mit 0x0 (Schwierigkeit 1 Hex-Ziffer -> im Schnitt 16 Versuche pro Block) */
+export function hashResult(seed: string, nonces: number[]) {
+  const txs = hashTxs(seed);
+  let prev = GENESIS;
+  let blocks = 0;
+  if (Array.isArray(nonces)) {
+    for (let i = 0; i < HASH.blocks; i++) {
+      const n = nonces[i];
+      if (!Number.isInteger(n) || n < 0 || n > HASH.maxNonce) break;
+      const h = blockHash(hashBlockText(i, prev, txs[i], n));
+      if (!h.startsWith(HASH.prefix)) break;
+      prev = h;
+      blocks++;
+    }
+  }
+  return { ok: blocks > 0, blocks, xp: blocks === HASH.blocks ? MAX_XP : blocks * 13 };
 }

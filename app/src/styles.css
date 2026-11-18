@@ -625,3 +625,109 @@ img.pixel {
   font-family: monospace;
   color: #231b2e;
 }
+
+/* Flappy-Pet */
+.flappy {
+  position: relative;
+  max-width: 720px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(#9fdcff, #c8f2dc);
+  touch-action: manipulation;
+  user-select: none;
+  margin-bottom: 10px;
+}
+.pipe {
+  position: absolute;
+  background: #5cc45a;
+  border: 2px solid #231b2e;
+  border-radius: 3px;
+}
+.flyer {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+}
+/* Simon Says */
+.simon {
+  display: grid;
+  grid-template-columns: repeat(2, 110px);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.simon-pad {
+  height: 110px;
+  border-radius: 16px;
+  border: 3px solid #231b2e;
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.08s, transform 0.08s;
+}
+.simon-pad.lit {
+  opacity: 1;
+  transform: scale(1.05);
+}
+/* Schiebe-Puzzle */
+.puzzle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(70px, 110px));
+  gap: 3px;
+  margin-bottom: 10px;
+}
+.ptile {
+  aspect-ratio: 1;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  image-rendering: pixelated;
+  position: relative;
+  padding: 0;
+  background-color: var(--card);
+}
+.ptile.blank {
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+.ptile span {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.75rem;
+  background: #0008;
+  color: #fff;
+  border-radius: 4px;
+  padding: 0 3px;
+}
+/* Hash-Raetsel */
+.chain {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.block {
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+.block.ok {
+  border-color: var(--ok);
+}
+.block.locked {
+  opacity: 0.55;
+}
+.mono {
+  font-family: monospace;
+  word-break: break-all;
+}
+.hash .good {
+  color: var(--ok);
+  font-weight: bold;
+}
+.hash .bad {
+  color: #e23d4f;
+  font-weight: bold;
+}

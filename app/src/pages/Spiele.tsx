@@ -4,18 +4,40 @@ import type { Address } from "viem";
 import { useContracts } from "../contracts";
 import { loadPet, useChainQuery, useMyPets, useTx } from "../hooks";
 import { TxStatus } from "../components/common";
-import { MEMORY_SYMBOLS, RACE } from "../../api/_games";
+import {
+  MEMORY_SYMBOLS,
+  RACE,
+  FLAPPY,
+  flappyStart,
+  flappyStep,
+  type FlappyPipe,
+  SIMON,
+  PUZZLE,
+  puzzleMove,
+  HASH,
+  GENESIS,
+  blockHash,
+  hashBlockText,
+} from "../../api/_games";
 
 // Minispiele: gespielt wird off-chain (keine Transaktion). Der Spiele-Server (api/game.ts) prueft jede Runde und
 // stellt einen signierten XP-Gutschein aus. Gutscheine werden gesammelt und mit EINER Transaktion eingeloest
 // (PetGames.claim). Tageslimit on-chain: 200 Spiel-XP pro Pet.
 
-type Kind = "memory" | "quiz" | "race";
+type Kind = "memory" | "quiz" | "race" | "flappy" | "simon" | "puzzle" | "hash";
 type Voucher = { player: Address; petId: string; kind: number; xp: number; nonce: string; expiry: string; chainId: number };
 type Stored = { v: Voucher; sig: `0x${string}` };
 
 const API = "/api/game";
-const LABEL: Record<Kind, string> = { memory: "🧠 Memory", quiz: "❓ Blockchain-Quiz", race: "🏃 Hürdenlauf" };
+const LABEL: Record<Kind, string> = {
+  memory: "🧠 Memory",
+  quiz: "❓ Blockchain-Quiz",
+  race: "🏃 Hürdenlauf",
+  flappy: "🪽 Flappy-Pet",
+  simon: "🎵 Simon Says",
+  puzzle: "🧩 Schiebe-Puzzle",
+  hash: "⛏️ Hash-Rätsel",
+};
 
 async function api(body: unknown) {
   const r = await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -245,6 +267,10 @@ function GameRound(p: RoundProps) {
       {round && p.kind === "memory" && <Memory layout={round.data.layout as number[]} onDone={finish} />}
       {round && p.kind === "quiz" && <Quiz questions={round.data.questions as { q: string; options: string[] }[]} onDone={finish} />}
       {round && p.kind === "race" && <Race obstacles={round.data.obstacles as number[]} petImage={p.petImage} onDone={finish} />}
+      {round && p.kind === "flappy" && <Flappy pipes={round.data.pipes as FlappyPipe[]} petImage={p.petImage} onDone={finish} />}
+      {round && p.kind === "simon" && <Simon sequence={round.data.sequence as number[]} onDone={finish} />}
+      {round && p.kind === "puzzle" && <Puzzle board={round.data.board as number[]} petImage={p.petImage} onDone={finish} />}
+      {round && p.kind === "hash" && <HashGame txs={round.data.txs as string[]} onDone={finish} />}
     </section>
   );
 }
@@ -413,6 +439,293 @@ function Race({ obstacles, petImage, onDone }: { obstacles: number[]; petImage: 
           Los!
         </button>
       )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Flappy-Pet (gleiche Ganzzahl-Physik wie der Server)
+
+function Flappy({ pipes, petImage, onDone }: { pipes: FlappyPipe[]; petImage: string; onDone: (flaps: number[]) => void }) {
+  const sprite = useMemo(() => spriteOnly(petImage), [petImage]);
+  const [running, setRunning] = useState(false);
+  const [view, setView] = useState({ t: 0, y: 500, vy: 0 });
+  const flaps = useRef<number[]>([]);
+  const want = useRef(false);
+  const startAt = useRef(0);
+  const done = useRef(false);
+
+  const flap = () => {
+    if (running) want.current = true;
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    const s = flappyStart();
+    let next = 0; // naechster zu simulierender Tick
+    let raf = 0;
+    const loop = () => {
+      const t = Math.min(FLAPPY.maxTicks, Math.floor((performance.now() - startAt.current) / FLAPPY.tickMs));
+      for (; next < t && !done.current; next++) {
+        const f = want.current;
+        want.current = false;
+        if (f) flaps.current.push(next);
+        if (flappyStep(s, f, next, pipes) || next + 1 >= FLAPPY.maxTicks) {
+          done.current = true;
+          setRunning(false);
+          onDone(flaps.current);
+          return;
+        }
+      }
+      setView({ t: next, y: s.y, vy: s.vy });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        want.current = true;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  const H = 320; // px Spielfeldhoehe
+  const k = H / FLAPPY.height;
+  const PX = 6; // px pro Tick
+  const PET_X = 70;
+  const passed = pipes.filter((p) => p.t + FLAPPY.pipeHalf < view.t).length;
+  return (
+    <>
+      <p className="muted small">Leertaste / Pfeil hoch / Tippen = Flügelschlag. 3 XP pro Röhre (max. 40).</p>
+      <div className="flappy" style={{ height: H }} onPointerDown={flap}>
+        {pipes
+          .filter((p) => Math.abs(p.t - view.t) < 120)
+          .map((p) => {
+            const x = PET_X + (p.t - view.t) * PX - FLAPPY.pipeHalf * PX;
+            const w = (2 * FLAPPY.pipeHalf + 1) * PX;
+            return (
+              <div key={p.t}>
+                <div className="pipe" style={{ left: x, width: w, top: 0, height: (p.g - FLAPPY.gapHalf) * k }} />
+                <div className="pipe" style={{ left: x, width: w, top: (p.g + FLAPPY.gapHalf) * k, bottom: 0 }} />
+              </div>
+            );
+          })}
+        <img
+          className="flyer pixel"
+          src={sprite}
+          alt=""
+          style={{ left: PET_X - 22, top: view.y * k - 22, transform: `rotate(${Math.max(-25, Math.min(45, view.vy))}deg)` }}
+        />
+        <div className="race-hud">
+          🪽 {passed} · {((view.t * FLAPPY.tickMs) / 1000).toFixed(1)} s / {(FLAPPY.maxTicks * FLAPPY.tickMs) / 1000} s
+        </div>
+      </div>
+      {!running && !done.current && (
+        <button
+          className="btn"
+          onClick={() => {
+            startAt.current = performance.now();
+            setRunning(true);
+          }}
+        >
+          Los!
+        </button>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Simon Says
+
+const SIMON_COLORS = ["#e23d4f", "#5cc45a", "#3f8fd0", "#ffc93c"];
+
+function Simon({ sequence, onDone }: { sequence: number[]; onDone: (attempts: number[][]) => void }) {
+  const [round, setRound] = useState(1); // aktuelle Laenge
+  const [lit, setLit] = useState<number | null>(null);
+  const [showing, setShowing] = useState(false);
+  const [input, setInput] = useState<number[]>([]);
+  const attempts = useRef<number[][]>([]);
+  const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    if (!started) return;
+    setShowing(true);
+    setInput([]);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    sequence.slice(0, round).forEach((c, i) => {
+      timers.push(setTimeout(() => setLit(c), 400 + i * SIMON.stepMs));
+      timers.push(setTimeout(() => setLit(null), 400 + i * SIMON.stepMs + SIMON.stepMs * 0.7));
+    });
+    timers.push(setTimeout(() => setShowing(false), 400 + round * SIMON.stepMs));
+    return () => timers.forEach(clearTimeout);
+  }, [round, started, sequence]);
+
+  function press(c: number) {
+    if (showing) return;
+    setLit(c);
+    setTimeout(() => setLit(null), 180);
+    const next = [...input, c];
+    setInput(next);
+    const wrong = next[next.length - 1] !== sequence[next.length - 1];
+    if (wrong || next.length === round) {
+      attempts.current.push(next);
+      if (wrong || round === SIMON.maxLen) onDone(attempts.current);
+      else setTimeout(() => setRound(round + 1), 500);
+    }
+  }
+
+  if (!started)
+    return (
+      <>
+        <p className="muted small">Merk dir die Farbfolge und tippe sie nach. Jede Runde kommt eine Farbe dazu. 4 XP pro Runde (max. 40).</p>
+        <button className="btn" onClick={() => setStarted(true)}>
+          Los!
+        </button>
+      </>
+    );
+  return (
+    <>
+      <p className="muted small">
+        Runde {round} / {SIMON.maxLen} · {showing ? "Zuschauen …" : `Du bist dran (${input.length}/${round})`}
+      </p>
+      <div className="simon">
+        {SIMON_COLORS.map((col, i) => (
+          <button
+            key={i}
+            className={`simon-pad ${lit === i ? "lit" : ""}`}
+            style={{ background: col }}
+            disabled={showing}
+            onClick={() => press(i)}
+            aria-label={`Farbe ${i + 1}`}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Schiebe-Puzzle mit dem eigenen Pet
+
+function Puzzle({ board: start, petImage, onDone }: { board: number[]; petImage: string; onDone: (moves: number[]) => void }) {
+  const [board, setBoard] = useState(start);
+  const moves = useRef<number[]>([]);
+  const [count, setCount] = useState(0);
+  const [hints, setHints] = useState(false);
+  const n = PUZZLE.n;
+  const blank = n * n - 1;
+
+  function click(pos: number) {
+    const b = [...board];
+    if (!puzzleMove(b, pos)) return;
+    moves.current.push(pos);
+    setCount(moves.current.length);
+    setBoard(b);
+    if (b.every((v, i) => v === i)) setTimeout(() => onDone(moves.current), 400);
+  }
+
+  return (
+    <>
+      <p className="muted small">
+        Schiebe die Teile zurück zum Bild deines Pets. Weniger Züge = mehr XP (max. 40). Züge: {count}{" "}
+        <label className="small">
+          <input type="checkbox" checked={hints} onChange={(e) => setHints(e.target.checked)} /> Nummern
+        </label>
+      </p>
+      <div className="puzzle">
+        {board.map((v, pos) => (
+          <button
+            key={pos}
+            className={`ptile ${v === blank ? "blank" : ""}`}
+            onClick={() => click(pos)}
+            style={
+              v === blank
+                ? undefined
+                : {
+                    backgroundImage: `url("${petImage}")`,
+                    backgroundSize: `${n * 100}% ${n * 100}%`,
+                    backgroundPosition: `${((v % n) / (n - 1)) * 100}% ${(Math.floor(v / n) / (n - 1)) * 100}%`,
+                  }
+            }
+          >
+            {hints && v !== blank && <span>{v + 1}</span>}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Hash-Raetsel (Mini-Proof-of-Work)
+
+function HashGame({ txs, onDone }: { txs: string[]; onDone: (nonces: number[]) => void }) {
+  const [nonces, setNonces] = useState<number[]>(() => txs.map(() => 0));
+  const [tries, setTries] = useState(0);
+  // Hashes verketten: jeder Block enthaelt den Hash des Vorgaengers
+  const blocks = useMemo(() => {
+    let prev = GENESIS;
+    let chainOk = true; // gueltig nur, wenn auch alle Vorgaenger gueltig sind
+    return txs.map((tx, i) => {
+      const hash = blockHash(hashBlockText(i, prev, tx, nonces[i]));
+      chainOk = chainOk && hash.startsWith(HASH.prefix);
+      const b = { prev, hash, ok: chainOk };
+      prev = hash;
+      return b;
+    });
+  }, [txs, nonces]);
+  const firstOpen = blocks.findIndex((b) => !b.ok);
+  const allOk = firstOpen === -1;
+
+  const set = (i: number, n: number) => {
+    setTries((t) => t + 1);
+    setNonces((ns) => ns.map((x, k) => (k === i ? Math.max(0, Math.min(HASH.maxNonce, n)) : x)));
+  };
+
+  return (
+    <>
+      <p className="muted small">
+        Du bist Miner: Finde für jeden Block eine <strong>Nonce</strong>, sodass sein Hash mit <code>0x0</code> beginnt (im Schnitt 16
+        Versuche). Jeder Block enthält den Hash des vorherigen – änderst du einen frühen Block, werden alle späteren ungültig. Versuche:{" "}
+        {tries}
+      </p>
+      <div className="chain">
+        {blocks.map((b, i) => (
+          <div key={i} className={`block ${b.ok ? "ok" : ""} ${i > (allOk ? 99 : firstOpen) ? "locked" : ""}`}>
+            <div className="small">
+              <strong>Block #{i + 1}</strong> {b.ok ? "✅" : "⛏️"}
+            </div>
+            <div className="mono small">prev: {b.prev.slice(0, 12)}…</div>
+            <div className="small">{txs[i]}</div>
+            <div className="row small">
+              Nonce
+              <button className="btn small" onClick={() => set(i, nonces[i] - 1)}>
+                −
+              </button>
+              <input
+                type="number"
+                min={0}
+                value={nonces[i]}
+                onChange={(e) => set(i, Number(e.target.value) || 0)}
+                style={{ width: "5rem" }}
+              />
+              <button className="btn small" onClick={() => set(i, nonces[i] + 1)}>
+                +1
+              </button>
+            </div>
+            <div className="mono small hash">
+              <span className={b.ok ? "good" : "bad"}>{b.hash.slice(0, 3)}</span>
+              {b.hash.slice(3, 20)}…
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="btn" disabled={!allOk} onClick={() => onDone(nonces)}>
+        ⛓️ Kette einreichen
+      </button>
     </>
   );
 }
