@@ -1595,8 +1595,13 @@
           "type": "address"
         },
         {
-          "internalType": "contract PetAnatomy",
-          "name": "anatomy_",
+          "internalType": "contract SpriteBodies",
+          "name": "bodies_",
+          "type": "address"
+        },
+        {
+          "internalType": "contract SpriteExtras",
+          "name": "extras_",
           "type": "address"
         }
       ],
@@ -1605,10 +1610,10 @@
     },
     {
       "inputs": [],
-      "name": "anatomy",
+      "name": "bodies",
       "outputs": [
         {
-          "internalType": "contract PetAnatomy",
+          "internalType": "contract SpriteBodies",
           "name": "",
           "type": "address"
         }
@@ -1622,6 +1627,19 @@
       "outputs": [
         {
           "internalType": "contract PetDecor",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "extras",
+      "outputs": [
+        {
+          "internalType": "contract SpriteExtras",
           "name": "",
           "type": "address"
         }

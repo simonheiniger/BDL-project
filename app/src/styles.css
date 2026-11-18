@@ -471,16 +471,10 @@ tr.winner {
   display: none;
 }
 
-/* ------------------------------------------------------------ 3D */
-.pet3d {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: grab;
-}
-.pet3d canvas {
-  display: block;
+/* ------------------------------------------------------------ Pixel-Art */
+.nft .art img,
+img.pixel {
+  image-rendering: pixelated;
 }
 .gal3d {
   display: grid;

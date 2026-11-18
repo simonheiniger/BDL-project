@@ -8,7 +8,7 @@ import PetPage from "./pages/PetPage";
 import Fusion from "./pages/Fusion";
 import Market from "./pages/Market";
 import Arena from "./pages/Arena";
-import Gallery3D from "./pages/Gallery3D";
+import Galerie from "./pages/Galerie";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -106,7 +106,7 @@ export default function App() {
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />
-          <Route path="/galerie" element={<Gallery3D />} />
+          <Route path="/galerie" element={<Galerie />} />
         </Routes>
       </main>
     </div>

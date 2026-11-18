@@ -110,7 +110,7 @@ erreicht die Burn-Rate nach einem Jahr ~58 % der Mint-Rate.
 ### 1.5 Aussehen: Spezies, DNA, Breeding
 
 Jedes Pet ist ein Tier im Chibi-Stil (grosser Kopf, Körper, Pfoten, Schwanz). Beim Mint bekommt es eine **DNA**
-(`uint256`); die unteren 128 Bit sind 8 Gene à 16 Bit. Daraus erzeugen `PetRenderer`, `PetAnatomy` und `PetDecor`
+(`uint256`); die unteren 128 Bit sind 8 Gene à 16 Bit. Daraus erzeugt `PetRenderer` (mit den Pixel-Daten aus `SpriteBodies`/`SpriteExtras`)
 Bild und Traits **komplett on-chain** (SVG, kein IPFS, kein Server).
 
 | Slot | Gen | Varianten (Wahrscheinlichkeit) |
@@ -141,27 +141,30 @@ unverändert; das Aussehen bestehender Pets wird aus derselben DNA neu abgeleite
 **Cosmetics im Bild:** `equip(petId, itemId)` speichert das getragene Item on-chain. `tokenURI` prüft bei jedem Aufruf,
 ob das Item noch in der Pet-Wallet liegt – wird es verkauft oder verschoben, verschwindet es aus dem Bild.
 
-**Zwei Darstellungen, eine Quelle:**
+**Stil: Pixel-Art (Retro, 32×32), eine einzige Darstellung.** Der Contract erzeugt das Bild selbst; die App zeigt genau
+dieses NFT-Bild an (kein separater 3D-/Browser-Renderer mehr). Marktplatz-Bild = App-Bild.
 
-| | on-chain SVG (`PetRenderer`) | Low-Poly-3D (App, Three.js) |
-|---|---|---|
-| Zweck | offizielles NFT-Bild, Marktplätze, Fallback | Spielerlebnis in der App |
-| Erzeugung | Solidity, bei jedem `tokenURI`-Aufruf | Browser (`app/src/three/`), prozedural |
-| Input | DNA, Level, Generation, sichtbares Cosmetic | dieselben on-chain Werte |
+| Ebene (Zeichenreihenfolge) | Quelle |
+|---|---|
+| Hintergrund (Himmel, Boden, Deko) | Hintergrund-Gen |
+| Flügel-Cosmetic | `SpriteExtras.cosmetic(5)` |
+| Ohren | `SpriteBodies.ears(Ohren-Gen)` – hinter dem Kopf |
+| Schwanz | `SpriteBodies.tail(Schwanz-Gen)` |
+| Körper inkl. Kopf und Art-Merkmalen (Rüssel, Horn, Mähne, Panzer …) | `SpriteBodies.body(Spezies-Gen)` |
+| Muster, Mund, Wangen, Augen | Muster-/Mund-/Augen-Gen, als Pixel gestempelt |
+| Cosmetic (Hut, Brille, Krone, Schal) | `SpriteExtras.cosmetic(id)` |
+| Eierschale (nur Stufe Ei) | `SpriteExtras.shell()` |
 
-**Stil:** Monster-Sammel-Look – glatte Formen mit Toon-Shading (3 harte Lichtstufen), dunkle Konturlinien
-(Inverted Hull), Chibi-Proportionen (grosser Kopf, Stummelbeine), Anime-Augen als Texturen. Jedes Tier hat einen
-**Element-Typ**, abgeleitet aus dem Farb-Gen: Normal (Fellkragen), Gestein (Felsplatten), Feuer/Magma (Flammenschwanz),
-Pflanze (Blattspross), Psycho (Stirnjuwel + Orb), Eis (Kristalle), Wasser (Flossen), Kosmos (Sternenring),
-Elektro (Blitzschwanz). Der Typ ist bisher nur in der App sichtbar (nicht in den on-chain Attributen).
+- **Feste Anker:** Kopf, Augen und Mund liegen bei allen 15 Arten an denselben Pixeln → Ohren/Schwanz einer anderen Art
+  (Mischling) und Cosmetics passen immer pixelgenau.
+- **Sprites werden generiert:** `contracts/art/build-sprites.mjs` zeichnet alle Sprites (Formen, Konturen, Schattierung,
+  Art-Merkmale) und schreibt sie als 4-Bit-Pixeldaten in die Contracts (≈ 14 KB). Farben kommen erst beim Rendern aus
+  dem Farb-Gen → jede Art in 10 Farbvarianten.
+- **Animation im SVG:** Pixel-Wippen, Blinzeln, wackelndes Ei, blinkende Aura bei legendären Pets.
+- **Gas:** `tokenURI` ist ein reiner Lesezugriff (kostet nichts), muss aber unter dem Gas-Limit des Nodes bleiben (30 M).
+  Worst Case gemessen ≈ 11 M; ein Test prüft < 15 M.
 
-Der 3D-Generator decodiert die DNA mit denselben Gewichten wie der Contract (`app/src/three/dna.ts` ↔ `PetRenderer.look`).
-Jede Spezies hat eigene Proportionen und Merkmale (Ohren, Schnauze, Schwanz); Ohren und Schwanz kommen aus ihren
-eigenen Genen → Mischlinge sind auch in 3D sichtbar. Fellmuster (Bauch, Flecken, Streifen, Brustfleck) sind
-Vertex-Farben; das Hintergrund-Gen wählt Himmel und Arena.
-Gleiche DNA → exakt gleiches Tier, bei jedem Spieler.
-
-Galerien: on-chain SVG `docs/gallery/index.html`, 3D in der App unter `/galerie`.
+Galerie: on-chain SVG `docs/gallery/index.html` und in der App unter `/galerie` (direkt vom Contract gerendert).
 
 ## 2. Smart-Contract-Architektur
 
@@ -182,7 +185,7 @@ Galerien: on-chain SVG `docs/gallery/index.html`, 3D in der App unter `/galerie`
 | `ERC6551Registry` | EIP-6551-Registry (lesbare Solidity-Variante). Account-Adresse = CREATE2(salt, Proxy-Bytecode + Footer). Eigene Instanz, weil das Kurs-Netz keine kanonische Registry hat. |
 | `PetAccount` | Account-Implementation. Liest seine NFT-Bindung aus dem Proxy-Footer (`extcodecopy`). `owner()` = Owner des NFTs. `execute()` nur Owner, erhöht `state`. `approve`/`setApprovalForAll` gesperrt. `sweepTo()` nur für PetNFT. |
 | `PetNFT` | Mint (legt TBA an, würfelt DNA), Pflege-Loop, Fusion inkl. Gen-Mischung, `equip()`. `tokenURI` delegiert an den Renderer. Verhindert Transfer eines Pets in die eigene Wallet. |
-| `PetRenderer` / `PetAnatomy` / `PetDecor` | Erzeugen SVG + Metadaten aus DNA, Level, Generation und getragenem Cosmetic. Drei Contracts wegen 24-KB-Limit (EIP-170). |
+| `PetRenderer` / `SpriteBodies` / `SpriteExtras` / `PetDecor` | Pixel-Art-SVG + Metadaten aus DNA, Level, Generation und getragenem Cosmetic. Aufgeteilt wegen 24-KB-Limit (EIP-170). |
 | `Cosmetics` | ERC-1155 mit Shop (`buy(id, amount, to)` → direkt ins TBA), Max-Supply pro Item. |
 | `Trophy` | Soulbound: `_update` revertiert ausser beim Mint (nur Arena) und bei Fusion-Migration (nur PetNFT). |
 | `Arena` | Turniere: Check-in-Signatur prüfen, Stats-Snapshot beim Join, Commit-Reveal, Trophy-Mint, Preisgeld-Split. |

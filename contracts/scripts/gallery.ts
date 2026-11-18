@@ -13,8 +13,9 @@ const OUT = path.join(__dirname, "../../docs/gallery");
 
 async function main() {
   const decor = await ethers.deployContract("PetDecor");
-  const anatomy = await ethers.deployContract("PetAnatomy");
-  const r = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
+  const bodies = await ethers.deployContract("SpriteBodies");
+  const extras = await ethers.deployContract("SpriteExtras");
+  const r = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await bodies.getAddress(), await extras.getAddress()]);
   const n = Number(process.env.N ?? 24);
   const base = {
     stats: [10, 10, 10, 10],

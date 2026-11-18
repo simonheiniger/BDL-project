@@ -83,8 +83,7 @@ export default function Fusion() {
             🧬 Breeding: Jedes der 8 Gene (Spezies, Ohren, Schwanz, Farbe, Augen, Mund, Muster, Hintergrund) kommt
             zufällig von einem der beiden Eltern – mit 1/16 Chance pro Gen auf eine <strong>Mutation</strong>. Erbt das
             Pet Ohren oder Schwanz von einer anderen Spezies, wird es ein <strong>Mischling</strong> (z.B. Katze mit
-            Fuchsschwanz) – Mischlinge gibt es nur durch Fusion und sie sind seltener. Das Juwel auf der Stirn zeigt die
-            Fusion an.
+            Fuchsschwanz) – Mischlinge gibt es nur durch Fusion und sie sind seltener. 
           </p>
           {burnInv && (
             <p className="small">

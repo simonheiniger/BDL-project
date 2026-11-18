@@ -165,7 +165,7 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
   it("Alle 15 Arten (auch Mischlinge) erzeugen wohlgeformtes SVG", async () => {
     const { renderer } = await loadFixture(fast);
     const SP = [0, 9, 18, 27, 35, 42, 46, 51, 57, 62, 67, 75, 82, 88, 94];
-    const base = { stats: [10, 10, 10, 10], focus: [0, 0, 0, 0], level: 8, xp: 0, lastAction: 0, dayStart: 0, actionsToday: 0, fusionCount: 0, generation: 1, equipped: 0 };
+    const base = { stats: [10, 10, 10, 10], focus: [0, 0, 0, 0], level: 20, xp: 0, lastAction: 0, dayStart: 0, actionsToday: 0, fusionCount: 0, generation: 1, equipped: 0 };
     for (let i = 0; i < 15; i++) {
       const j = (i + 7) % 15; // fremde Ohren/Schwanz -> Mischling
       for (const [ears, tail] of [[i, i], [j, j]]) {
@@ -173,8 +173,19 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
         const svg = await renderer.svg({ ...base, dna }, 0);
         expect(svg.startsWith("<svg") && svg.endsWith("</svg>")).to.equal(true);
         expect(svg).to.not.include('""'); // kaputte Attribute
+        expect(svg).to.not.include('class="c0"'); // durchsichtige Pixel duerfen nie gezeichnet werden
         expect((svg.match(/<g[ >]/g) ?? []).length).to.equal((svg.match(/<\/g>/g) ?? []).length);
       }
+    }
+  });
+
+  it("Rendern bleibt deutlich unter dem Node-Gaslimit (30 M) – Worst Case", async () => {
+    const { renderer } = await loadFixture(fast);
+    const SP = [0, 9, 18, 27, 35, 42, 46, 51, 57, 62, 67, 75, 82, 88, 94];
+    const base = { stats: [10, 10, 10, 10], focus: [0, 0, 0, 0], level: 20, xp: 0, lastAction: 0, dayStart: 0, actionsToday: 0, fusionCount: 0, generation: 2, equipped: 0 };
+    for (let sp = 0; sp < 15; sp++) {
+      const dna = [93, SP[sp], SP[sp], 3, 1, 2, 2, SP[sp]].reduce((a, v, i) => a | (BigInt(v) << BigInt(16 * i)), 0n);
+      expect(await renderer.tokenURI.estimateGas(1, { ...base, dna }, 5, "Fluegel")).to.be.lt(15_000_000n);
     }
   });
 
@@ -183,8 +194,9 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
     const { id } = await mintPet(pets, alice);
     const dnaBefore = (await pets.getPet(id)).dna;
     const decor = await ethers.deployContract("PetDecor");
-    const anatomy = await ethers.deployContract("PetAnatomy");
-    const r2 = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await anatomy.getAddress()]);
+    const bodies = await ethers.deployContract("SpriteBodies");
+    const extras = await ethers.deployContract("SpriteExtras");
+    const r2 = await ethers.deployContract("PetRenderer", [await decor.getAddress(), await bodies.getAddress(), await extras.getAddress()]);
     await pets.setRenderer(await r2.getAddress());
     expect((await pets.getPet(id)).dna).to.equal(dnaBefore);
     expect(decodeUri(await pets.tokenURI(id)).name).to.match(/#1$/);

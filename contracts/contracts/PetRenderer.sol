@@ -5,15 +5,15 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Pet} from "./lib/PetTypes.sol";
 import {PetDecor} from "./PetDecor.sol";
-import {PetAnatomy} from "./PetAnatomy.sol";
+import {SpriteBodies} from "./pixel/SpriteBodies.sol";
+import {SpriteExtras} from "./pixel/SpriteExtras.sol";
 
-/// @title PetRenderer – generiert Bild (SVG) und Metadaten eines Pets komplett on-chain
-/// @notice Aussehen = f(DNA, Level, Generation, angezogenes Cosmetic). Kein IPFS, kein Server:
-///         solange die Chain existiert, existiert das Bild.
-/// @dev Aufgeteilt auf PetRenderer + PetAnatomy + PetDecor wegen 24-KB-Limit pro Contract (EIP-170).
-///      DNA-Layout: 8 Gene a 16 Bit (Slot k = Bits 16k..16k+15):
-///      0 Farbe, 1 Spezies (Kopf/Koerper/Schnauze), 2 Ohren, 3 Augen, 4 Mund, 5 Muster, 6 Hintergrund, 7 Schwanz.
-///      Beim Mint sind Slot 1, 2 und 7 identisch (reinrassig); Fusion mischt slotweise -> Mischlinge.
+/// @title PetRenderer – Pixel-Art (32x32, Retro) komplett on-chain aus der DNA
+/// @notice Ebenen: Fluegel-Cosmetic -> Ohren -> Schwanz -> Koerper -> Muster -> Mund/Augen -> Cosmetic -> (Eierschale).
+///         Alle Arten teilen dieselben Anker (Kopf, Augen, Mund) -> Mischlinge und Cosmetics passen pixelgenau.
+///         Die App zeigt genau dieses Bild an; es gibt nur eine Darstellung.
+/// @dev Sprite-Daten (4 Bit/Pixel) liegen in SpriteBodies/SpriteExtras (generiert von art/build-sprites.mjs).
+///      DNA-Layout: 8 Gene a 16 Bit: 0 Farbe, 1 Spezies, 2 Ohren, 3 Augen, 4 Mund, 5 Muster, 6 Hintergrund, 7 Schwanz.
 contract PetRenderer {
     using Strings for uint256;
 
@@ -32,14 +32,15 @@ contract PetRenderer {
 
     string private constant SPECIES =
         "Katze|Fuchs|Hase|Baer|Frosch|Drache|Giraffe|Elefant|Nashorn|Krokodil|Pinguin|Eule|Schildkroete|Loewe|Wolf";
-    string private constant BODY = '<ellipse cx="200" cy="300" rx="80" ry="60"/>';
 
     PetDecor public immutable decor;
-    PetAnatomy public immutable anatomy;
+    SpriteBodies public immutable bodies;
+    SpriteExtras public immutable extras;
 
-    constructor(PetDecor decor_, PetAnatomy anatomy_) {
+    constructor(PetDecor decor_, SpriteBodies bodies_, SpriteExtras extras_) {
         decor = decor_;
-        anatomy = anatomy_;
+        bodies = bodies_;
+        extras = extras_;
     }
 
     // ------------------------------------------------------------------ Gene -> Traits
@@ -181,193 +182,260 @@ contract PetRenderer {
         );
     }
 
-    // ------------------------------------------------------------------ SVG
+    // ------------------------------------------------------------------ SVG (Pixel-Art)
+
+    /// @dev Augen-Muster 3x3 (Farbindex je Pixel, 0 = durchsichtig): rund, schlaefrig, zwinkernd, funkelnd, Herz, Stern
+    bytes private constant EYES =
+        hex"080805080808080808" hex"000000080808000000" hex"000800080008000000" hex"080b050b0b0b080b08"
+        hex"060006060606000600" hex"000700070707070007";
+
+    struct Buf {
+        bytes b;
+        uint256 n;
+    }
 
     function svg(Pet memory p, uint256 itemId) public view returns (string memory) {
         Look memory l = look(p.dna, p.level);
-        (string memory main, string memory light, string memory dark) = _palette(l.palette);
-        string memory headShape = l.stage == 0 ? _egg() : anatomy.head(l.species);
+        uint256 dy = l.stage == 0 ? 7 : 0; // Ei: Baby sitzt tiefer, schaut aus der Schale
+        bytes memory c = new bytes(1024);
 
-        string memory out = string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><defs>',
-            decor.bgGradient(l.bg),
-            '<radialGradient id="b" cx="160" cy="150" r="240" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="',
-            light,
-            '"/><stop offset=".5" stop-color="',
-            main,
-            '"/><stop offset="1" stop-color="',
-            dark,
-            '"/></radialGradient><radialGradient id="au"><stop offset=".45" stop-color="',
-            main,
-            '" stop-opacity=".95"/><stop offset=".7" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="',
-            light,
-            '" stop-opacity="0"/></radialGradient><clipPath id="c">',
-            headShape,
-            l.stage == 0 ? "" : BODY,
-            "</clipPath></defs>",
-            '<rect width="400" height="400" fill="url(#bg)"/>',
-            decor.bgDecor(l.bg)
-        );
+        if (itemId == 5) _blit(c, extras.cosmetic(5), 0, 0, 32, 32, dy);
+        _blit(c, bodies.ears(l.ears), 0, 0, 32, 20, dy);
+        _blit(c, bodies.tail(l.tail), 20, 13, 12, 16, dy);
+        _blit(c, bodies.body(l.species), 0, 0, 32, 32, dy);
+        _pattern(c, l.pattern, dy);
+        if (!_noMouth(l.species)) _mouth(c, l.mouth, dy);
+        _blush(c, dy);
+        bool bump = l.ears == 4 || l.ears == 9;
+        _eyes(c, l.eyes, bump, dy);
+        if (itemId >= 1 && itemId <= 4) _blit(c, extras.cosmetic(itemId), 0, 0, 32, 32, dy);
+        if (l.stage == 0) _blit(c, extras.shell(), 0, 21, 32, 14, 0); // Augen bleiben ueber dem Schalenrand
+
+        Buf memory o = Buf(new bytes(48_000), 0);
+        _w(o, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" shape-rendering="crispEdges"><style>');
+        _style(o, l.palette);
+        _w(o, '</style><g transform="scale(12.5)">');
+        _w(o, bytes(_background(l.bg)));
+        _w(o, '<rect x="9" y="29" width="14" height="1" fill="#000" opacity=".18"/>');
         if (l.stage == 3) {
-            out = string.concat(
-                out,
-                '<circle cx="200" cy="225" r="165" fill="url(#au)"><animate attributeName="r" values="150;178;150" dur="3s" repeatCount="indefinite"/></circle><g stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".7"><path d="M200 30V60M200 390V370M30 225H60M370 225H340M80 105L101 126M320 105L299 126"/><animateTransform attributeName="transform" type="rotate" values="0 200 225;360 200 225" dur="24s" repeatCount="indefinite"/></g>'
-            );
+            _w(o, '<g><animate attributeName="opacity" values="1;.3" dur=".8s" calcMode="discrete" repeatCount="indefinite"/>');
+            _emit(o, extras.aura(), 1);
+            _w(o, "</g>");
         }
-        out = string.concat(
-            out,
-            '<ellipse cx="200" cy="362" rx="110" ry="13" fill="#000" opacity=".15"/>',
-            '<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -6;0 0" dur="3s" repeatCount="indefinite"/>',
-            l.stage == 0 ? _eggBody(headShape, dark) : _creature(p, l, headShape, main, light, dark, itemId),
-            "</g>"
+        if (l.stage == 1) _w(o, '<g transform="translate(4 8) scale(.75)">');
+        else _w(o, "<g>");
+        _w(
+            o,
+            bytes(
+                l.stage == 0
+                    ? '<g><animateTransform attributeName="transform" type="translate" values="0 0;1 0;0 0;-1 0" dur="1.6s" calcMode="discrete" repeatCount="indefinite"/>'
+                    : '<g><animateTransform attributeName="transform" type="translate" values="0 0;0 1" dur="1.2s" calcMode="discrete" repeatCount="indefinite"/>'
+            )
         );
-        if (l.stage == 3 || l.palette == 9) out = string.concat(out, decor.sparkles());
-        return string.concat(out, decor.frame(l.tier), "</svg>");
-    }
-
-    /// @dev Zeichenreihenfolge: Fluegel, Schwanz, Koerper, Ohren, Kopf, Muster, Pfoten, Gesicht, Accessoires
-    function _creature(
-        Pet memory p,
-        Look memory l,
-        string memory headShape,
-        string memory main,
-        string memory light,
-        string memory dark,
-        uint256 itemId
-    ) internal view returns (string memory) {
-        string memory fill = string.concat('<g fill="url(#b)" stroke="', dark, '" stroke-width="5" stroke-linejoin="round">');
-        string memory g = string.concat(
-            l.stage == 1 ? '<g transform="translate(200 362) scale(.8) translate(-200 -362)">' : "<g>",
-            itemId == 5 ? decor.wings() : "",
-            anatomy.tail(l.tail, main, dark),
-            fill,
-            BODY,
-            "</g>",
-            anatomy.back(l.species, dark),
-            anatomy.ears(l.ears, dark),
-            fill,
-            headShape,
-            '</g><g clip-path="url(#c)">',
-            _pattern(l.pattern, dark),
-            l.palette == 8 ? _galaxySpeckles() : "",
-            "</g>",
-            fill,
-            '<ellipse cx="168" cy="350" rx="22" ry="14"/><ellipse cx="232" cy="350" rx="22" ry="14"/></g>'
-        );
-        return string.concat(
-            g,
-            '<ellipse cx="148" cy="130" rx="32" ry="17" fill="#fff" opacity=".45" transform="rotate(-30 148 130)"/>',
-            anatomy.snout(l.species, light, dark),
-            l.ears == 4 || l.ears == 9 ? string.concat('<g transform="translate(0 -60)">', _eyes(l.eyes), "</g>") : _eyes(l.eyes),
-            '<g fill="#ff7aa2" opacity=".5"><ellipse cx="126" cy="222" rx="17" ry="10"/><ellipse cx="274" cy="222" rx="17" ry="10"/></g>',
-            _noMouth(l.species) ? "" : _mouth(l.mouth),
-            p.generation > 1 ? _gem() : "",
-            itemId != 5 ? decor.cosmetic(itemId) : "",
-            "</g>"
-        );
-    }
-
-    /// @dev Frosch (breites Maul), Elefant (Ruessel), Krokodil (Zaehne), Pinguin/Eule (Schnabel)
-    function _noMouth(uint8 s) internal pure returns (bool) {
-        return s == 4 || s == 7 || s == 9 || s == 10 || s == 11;
-    }
-
-    function _egg() internal pure returns (string memory) {
-        return '<path d="M200 118C262 118 300 210 300 268C300 320 255 345 200 345C145 345 100 320 100 268C100 210 138 118 200 118Z"/>';
-    }
-
-    function _eggBody(string memory shape, string memory dark) internal pure returns (string memory) {
-        return string.concat(
-            '<g><animateTransform attributeName="transform" type="rotate" values="-4 200 345;4 200 345;-4 200 345" dur="2s" repeatCount="indefinite"/>',
-            '<g fill="url(#b)" stroke="',
-            dark,
-            '" stroke-width="5">',
-            shape,
-            '</g><g clip-path="url(#c)" fill="#fff" opacity=".55"><circle cx="150" cy="190" r="16"/><circle cx="245" cy="170" r="11"/><circle cx="265" cy="300" r="18"/><circle cx="135" cy="305" r="12"/></g>',
-            '<path d="M128 250L152 236L172 256L196 236L220 258L244 238L272 252" fill="none" stroke="',
-            dark,
-            '" stroke-width="5" stroke-linejoin="round"/>',
-            '<g fill="#2b2340"><circle cx="178" cy="218" r="8"/><circle cx="222" cy="218" r="8"/></g>',
-            '<ellipse cx="155" cy="170" rx="22" ry="13" fill="#fff" opacity=".5" transform="rotate(-35 155 170)"/></g>'
-        );
-    }
-
-    function _eyes(uint8 e) internal pure returns (string memory) {
-        if (e == 1) {
-            return '<path d="M142 192Q160 206 178 192M222 192Q240 206 258 192" fill="none" stroke="#2b2340" stroke-width="6" stroke-linecap="round"/>';
+        _emit(o, c, 1);
+        if (itemId != 2 && l.eyes != 1 && l.eyes != 2) _blink(o, bump, dy);
+        _w(o, "</g></g></g>");
+        if (l.stage == 3 || l.palette == 9) _w(o, bytes(decor.sparkles()));
+        _w(o, bytes(decor.frame(l.tier)));
+        _w(o, "</svg>");
+        bytes memory out = o.b;
+        uint256 n = o.n;
+        assembly {
+            mstore(out, n)
         }
-        if (e == 2) {
-            return string.concat(
-                _roundEye("160"),
-                '<path d="M222 194Q240 178 258 194" fill="none" stroke="#2b2340" stroke-width="6" stroke-linecap="round"/>'
-            );
+        return string(out);
+    }
+
+    /// @dev Sprite (4 Bit/Pixel, Zeile fuer Zeile) auf die 32x32-Leinwand; 0 = durchsichtig
+    function _blit(bytes memory c, bytes memory d, uint256 x0, uint256 y0, uint256 w, uint256 h, uint256 dy) internal pure {
+        if (d.length == 0) return;
+        for (uint256 r = 0; r < h; ++r) {
+            uint256 y = y0 + r + dy;
+            if (y > 31) break;
+            for (uint256 col = 0; col < w; ++col) {
+                uint256 i = r * w + col;
+                uint8 v = uint8(d[i >> 1]);
+                v = i & 1 == 0 ? v >> 4 : v & 15;
+                if (v != 0) c[(y << 5) + x0 + col] = bytes1(v);
+            }
         }
-        if (e == 3) return string.concat(_sparkleEye("160"), _sparkleEye("240"));
-        if (e == 4) {
-            return '<g fill="#ff4d7d" stroke="#2b2340" stroke-width="3"><path d="M160 184C160 172 142 172 142 184C142 194 156 200 160 208C164 200 178 194 178 184C178 172 160 172 160 184Z"/><path d="M240 184C240 172 222 172 222 184C222 194 236 200 240 208C244 200 258 194 258 184C258 172 240 172 240 184Z"/></g>';
-        }
-        if (e == 5) return string.concat(_star("160"), _star("240"));
-        return string.concat(_roundEye("160"), _roundEye("240"));
     }
 
-    function _roundEye(string memory x) internal pure returns (string memory) {
-        return string.concat(
-            '<g transform="translate(',
-            x,
-            ' 190)"><circle r="17" fill="#2b2340"/><circle cx="5" cy="-6" r="6" fill="#fff"/><circle cx="-5" cy="6" r="3" fill="#fff"/></g>'
-        );
-    }
-
-    function _sparkleEye(string memory x) internal pure returns (string memory) {
-        return string.concat(
-            '<g transform="translate(',
-            x,
-            ' 190)"><ellipse rx="20" ry="25" fill="#2b2340"/><ellipse cy="9" rx="14" ry="12" fill="#6a4cff" opacity=".8"/><circle cx="6" cy="-9" r="8" fill="#fff"/><circle cx="-7" cy="8" r="4" fill="#fff"/></g>'
-        );
-    }
-
-    function _star(string memory x) internal pure returns (string memory) {
-        return string.concat(
-            '<polygon transform="translate(',
-            x,
-            ' 190)" points="0,-20 5.9,-8.1 19,-6.2 9.5,3.1 11.8,16.2 0,10 -11.8,16.2 -9.5,3.1 -19,-6.2 -5.9,-8.1" fill="#ffd23f" stroke="#b8860b" stroke-width="3" stroke-linejoin="round"/>'
-        );
-    }
-
-    function _mouth(uint8 m) internal pure returns (string memory) {
-        if (m == 1) return '<path d="M184 222Q192 233 200 222Q208 233 216 222" fill="none" stroke="#2b2340" stroke-width="4" stroke-linecap="round"/>';
-        if (m == 2) return '<ellipse cx="200" cy="230" rx="9" ry="11" fill="#2b2340"/><ellipse cx="200" cy="236" rx="6" ry="4" fill="#ff7aa2"/>';
-        if (m == 3) return '<path d="M188 222Q200 234 212 222" fill="none" stroke="#2b2340" stroke-width="4" stroke-linecap="round"/><path d="M195 229Q200 243 205 229Z" fill="#ff7aa2" stroke="#2b2340" stroke-width="2"/>';
-        return '<path d="M188 222Q200 234 212 222" fill="none" stroke="#2b2340" stroke-width="4" stroke-linecap="round"/>';
-    }
-
-    function _pattern(uint8 pt, string memory dark) internal pure returns (string memory) {
-        if (pt == 1) return '<ellipse cx="200" cy="322" rx="50" ry="36" fill="#fff" opacity=".6"/>';
-        if (pt == 2) {
-            return string.concat(
-                '<g fill="',
-                dark,
-                '" opacity=".28"><circle cx="126" cy="150" r="14"/><circle cx="276" cy="160" r="10"/><circle cx="232" cy="118" r="8"/><circle cx="148" cy="300" r="11"/><circle cx="252" cy="310" r="13"/><circle cx="110" cy="200" r="7"/></g>'
-            );
-        }
-        if (pt == 3) {
-            return string.concat(
-                '<path d="M200 98V134M176 102L182 130M224 102L218 130M124 286L148 292M122 310L146 312M276 286L252 292M278 310L254 312" stroke="',
-                dark,
-                '" stroke-width="9" stroke-linecap="round" opacity=".35"/>'
-            );
-        }
+    /// @dev Muster nur auf Fell-Pixeln (Index 2): Bauch, Punkte, Streifen, Herz
+    function _pattern(bytes memory c, uint8 pt, uint256 dy) internal pure {
+        if (pt == 0) return;
         if (pt == 4) {
-            return '<path d="M200 310C200 296 178 296 178 310C178 324 196 332 200 342C204 332 222 324 222 310C222 296 200 296 200 310Z" fill="#ff4d7d" opacity=".85"/>';
+            _stamp(c, 14, 22 + dy, hex"060006060606000600", 3);
+            return;
         }
-        return "";
+        for (uint256 y = 7; y < 30; ++y) {
+            for (uint256 x = 6; x < 26; ++x) {
+                uint256 i = ((y + dy) << 5) + x;
+                if (y + dy > 31 || c[i] != 0x02) continue;
+                if (pt == 1) {
+                    uint256 ddx = x > 15 ? x - 15 : 15 - x;
+                    if (y >= 21 && y <= 27 && ddx <= 4) c[i] = 0x03;
+                } else if (pt == 2) {
+                    if ((x * 7 + y * 5) % 11 == 0) c[i] = 0x04;
+                } else if (pt == 3) {
+                    if ((y <= 10 && x % 3 == 1) || (y >= 20 && (x + y) % 4 == 0 && (x < 14 || x > 17))) c[i] = 0x04;
+                }
+            }
+        }
     }
 
-    function _galaxySpeckles() internal pure returns (string memory) {
-        return '<g fill="#fff"><circle cx="130" cy="160" r="2.5"/><circle cx="280" cy="140" r="2"/><circle cx="250" cy="310" r="3"/><circle cx="160" cy="300" r="2"/><circle cx="290" cy="220" r="2.5"/><circle cx="112" cy="230" r="2"/><circle cx="215" cy="112" r="2"/></g>';
+    function _mouth(bytes memory c, uint8 m, uint256 dy) internal pure {
+        if (m == 0) _stamp(c, 14, 16 + dy, hex"0800000800080800", 4);
+        else if (m == 1) _stamp(c, 13, 16 + dy, hex"080008080008000800000800", 6);
+        else if (m == 2) _stamp(c, 14, 16 + dy, hex"000808000806060800080800", 4);
+        else _stamp(c, 14, 16 + dy, hex"0808080800060600", 4);
     }
 
-    function _gem() internal pure returns (string memory) {
-        return '<path d="M200 122L212 137L200 152L188 137Z" fill="#7df9ff" stroke="#2b2340" stroke-width="3"/><path d="M200 126L205 137L200 134Z" fill="#fff"/>';
+    function _blush(bytes memory c, uint256 dy) internal pure {
+        for (uint256 k = 0; k < 4; ++k) {
+            uint256 x = k < 2 ? 9 + k : 19 + k; // 9,10 und 21,22
+            uint256 i = ((15 + dy) << 5) + x;
+            uint8 v = uint8(c[i]);
+            if (v >= 2 && v <= 5) c[i] = 0x06;
+        }
+    }
+
+    function _eyes(bytes memory c, uint8 e, bool bump, uint256 dy) internal pure {
+        uint256 y = (bump ? 6 : 11) + dy;
+        bytes memory pat = new bytes(9);
+        for (uint256 side = 0; side < 2; ++side) {
+            uint256 kind = e == 2 && side == 1 ? 2 : e == 2 ? 0 : e;
+            for (uint256 i = 0; i < 9; ++i) pat[i] = EYES[kind * 9 + i];
+            _stamp(c, side == 0 ? (bump ? 10 : 11) : (bump ? 19 : 18), y, pat, 3);
+        }
+    }
+
+    /// @dev Blinzeln: alle ~4 s kurz Lider (Fell + Strich) ueber die Augen
+    function _blink(Buf memory o, bool bump, uint256 dy) internal pure {
+        string memory y = (bump ? 6 + dy : 11 + dy).toString();
+        string memory y1 = (bump ? 7 + dy : 12 + dy).toString();
+        _w(o, '<g opacity="0"><animate attributeName="opacity" values="0;1;0" keyTimes="0;.94;.98" dur="4s" calcMode="discrete" repeatCount="indefinite"/>');
+        for (uint256 side = 0; side < 2; ++side) {
+            string memory x = uint256(side == 0 ? (bump ? 10 : 11) : (bump ? 19 : 18)).toString();
+            _w(o, bytes(string.concat('<rect x="', x, '" y="', y, '" width="3" height="3" class="c2"/><rect x="', x, '" y="', y1, '" width="3" height="1" class="c8"/>')));
+        }
+        _w(o, "</g>");
+    }
+
+    function _stamp(bytes memory c, uint256 x0, uint256 y0, bytes memory pat, uint256 w) internal pure {
+        for (uint256 i = 0; i < pat.length; ++i) {
+            if (pat[i] == 0) continue;
+            uint256 y = y0 + i / w;
+            if (y > 31) continue;
+            c[(y << 5) + x0 + (i % w)] = pat[i];
+        }
+    }
+
+    /// @dev Leinwand -> <rect>-Laeufe (gleichfarbige Pixel einer Zeile zusammengefasst)
+    function _emit(Buf memory o, bytes memory c, uint256 minV) internal pure {
+        if (c.length < 1024) {
+            // Sprite im 4-Bit-Format (Aura): erst entpacken
+            bytes memory full = new bytes(1024);
+            _blit(full, c, 0, 0, 32, 32, 0);
+            c = full;
+        }
+        for (uint256 y = 0; y < 32; ++y) {
+            uint256 x = 0;
+            while (x < 32) {
+                uint8 v = uint8(c[(y << 5) + x]);
+                if (v < minV) {
+                    ++x;
+                    continue;
+                }
+                uint256 run = 1;
+                while (x + run < 32 && uint8(c[(y << 5) + x + run]) == v) ++run;
+                _w(o, '<rect x="');
+                _w(o, _n(x));
+                _w(o, '" y="');
+                _w(o, _n(y));
+                _w(o, '" width="');
+                _w(o, _n(run));
+                _w(o, '" height="1" class="c');
+                _w(o, _n(v));
+                _w(o, '"/>');
+                x += run;
+            }
+        }
+    }
+
+    function _style(Buf memory o, uint8 pal) internal pure {
+        (string memory main, string memory light, string memory dark) = _palette(pal);
+        _w(
+            o,
+            bytes(
+                string.concat(
+                    ".c1{fill:#231b2e}.c2{fill:",
+                    main,
+                    "}.c3{fill:",
+                    light,
+                    "}.c4{fill:",
+                    dark,
+                    "}.c5{fill:#fff8ee}.c6{fill:#ff8fb1}.c7{fill:#ffc93c}.c8{fill:#1a1220}.c9{fill:#e23d4f}"
+                    ".c10{fill:#5cc45a}.c11{fill:#5fd8ff}.c12{fill:#c9ced8}.c13{fill:#7a4b2a}.c14{fill:#f28c28}"
+                )
+            )
+        );
+    }
+
+    /// @dev Retro-Hintergrund: Himmel, Boden, ein paar Deko-Pixel
+    function _background(uint8 b) internal pure returns (string memory) {
+        string memory deco = b == 0
+            ? '<rect x="23" y="3" width="5" height="5" fill="#ffe7a0"/><rect x="22" y="4" width="7" height="3" fill="#ffe7a0"/>'
+            : b == 1
+                ? '<g fill="#4fa35e"><rect x="3" y="28" width="1" height="1"/><rect x="5" y="27" width="1" height="2"/><rect x="26" y="28" width="1" height="1"/><rect x="28" y="27" width="1" height="2"/></g>'
+                : b == 2
+                    ? '<g fill="#fff"><rect x="3" y="3" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="27" y="2" width="1" height="1"/><rect x="24" y="8" width="1" height="1"/><rect x="5" y="12" width="1" height="1"/><rect x="29" y="14" width="1" height="1"/></g><rect x="23" y="3" width="4" height="4" fill="#fff6c7"/><rect x="25" y="2" width="3" height="4" fill="#1d2150"/>'
+                    : b == 3
+                        ? '<g fill="#fff"><rect x="2" y="4" width="6" height="2"/><rect x="3" y="3" width="3" height="1"/><rect x="23" y="7" width="7" height="2"/><rect x="25" y="6" width="3" height="1"/></g>'
+                        : b == 4
+                            ? '<g fill="#e6f7ff"><rect x="4" y="10" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="27" y="9" width="1" height="1"/><rect x="26" y="4" width="2" height="2"/></g>'
+                            : '<g><rect x="4" y="5" width="1" height="1" fill="#ff8fb1"/><rect x="27" y="7" width="1" height="1" fill="#86c5ff"/><rect x="6" y="20" width="1" height="1" fill="#ffc93c"/><rect x="25" y="18" width="1" height="1" fill="#7fe0c0"/></g>';
+        return string.concat(
+            '<rect width="32" height="32" fill="',
+            _pick(b, "#ffb48a|#c8f2dc|#1d2150|#ffd6ec|#9fdcff|#fff1d6"),
+            '"/><rect y="29" width="32" height="3" fill="',
+            _pick(b, "#c97b5a|#6cc47a|#3a3f7a|#e6b3e6|#3f8fd0|#e6c99a"),
+            '"/>',
+            deco
+        );
+    }
+
+    /// @dev Frosch (Breitmaul), Elefant (Ruessel), Krokodil (Zaehne), Eule (Schnabel) zeichnen ihr Maul selbst
+    function _noMouth(uint8 s) internal pure returns (bool) {
+        return s == 4 || s == 7 || s == 9 || s == 11;
+    }
+
+    /// @dev An den Puffer anhaengen, in 32-Byte-Woertern (statt Byte fuer Byte -> ~10x weniger Gas).
+    ///      Kann bis zu 31 Byte ueber das Ende hinaus schreiben -> Reserve im Puffer pruefen.
+    function _w(Buf memory o, bytes memory s) internal pure {
+        bytes memory b = o.b;
+        uint256 n = o.n;
+        uint256 len = s.length;
+        require(n + len + 32 <= b.length, "svg buffer");
+        assembly {
+            let dst := add(add(b, 32), n)
+            let src := add(s, 32)
+            for { let i := 0 } lt(i, len) { i := add(i, 32) } {
+                mstore(add(dst, i), mload(add(src, i)))
+            }
+        }
+        o.n = n + len;
+    }
+
+    /// @dev Zahl 0..99 als ASCII (guenstiger als Strings.toString fuer die vielen Pixel-Koordinaten)
+    function _n(uint256 v) internal pure returns (bytes memory r) {
+        if (v < 10) {
+            r = new bytes(1);
+            r[0] = bytes1(uint8(48 + v));
+        } else {
+            r = new bytes(2);
+            r[0] = bytes1(uint8(48 + v / 10));
+            r[1] = bytes1(uint8(48 + (v % 10)));
+        }
     }
 }

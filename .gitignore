@@ -10,3 +10,4 @@ sim/out/
 contracts/seeds/
 *.local
 session.txt
+contracts/art/out/

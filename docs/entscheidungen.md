@@ -27,9 +27,11 @@ Format: Entscheidung → Begründung → verworfene Alternative. Beide Teammitgl
 | Frage | Antwort |
 |---|---|
 | Warum Bild on-chain statt IPFS? | Kein externer Dienst, der ausfallen kann; das Bild hängt live am Zustand (Level, Cosmetic). Bei IPFS müsste man bei jedem Level-Up neue Metadaten hochladen und einem Server vertrauen. |
-| Warum drei Render-Contracts? | Ein Contract darf max. 24 KB Code haben (EIP-170). Renderer ~18 KB, Anatomy ~6 KB, Decor ~7 KB. |
-| Warum 3D nicht on-chain? | Ein 3D-Generator in Solidity wäre zu gross und zu teuer. On-chain liegt die **DNA** (die Wahrheit); der Browser rendert sie deterministisch. Das SVG bleibt als on-chain Bild für Marktplätze. Next step: Generator-Bundle auf IPFS und per `animation_url` in den Metadaten verlinken → Marktplätze zeigen das 3D-Modell. |
-| Warum prozedural statt fertiger 3D-Modelle? | Fertige Modelle können keine Mischlinge, Evolution oder Gen-Vererbung zeigen. Prozedural entsteht jedes Tier aus der DNA. |
+| Warum Pixel-Art? | Passt zum Tamagotchi-Original, ist klar erkennbar und so kompakt, dass das komplette Bild on-chain entstehen kann (≈ 14 KB Sprite-Daten). Vorher gab es eine 3D-Version im Browser – dadurch zwei Darstellungen, die auseinanderlaufen konnten. Jetzt gibt es nur noch das on-chain Bild. |
+| Warum mehrere Render-Contracts? | Ein Contract darf max. 24 KB Code haben (EIP-170): Renderer ~19 KB, Sprite-Daten ~11 KB + ~2 KB, Decor ~7 KB. |
+| Warum 4 Bit pro Pixel? | 16 Farb-Indizes reichen (Kontur, Fell hell/normal/dunkel, feste Farben). Halbiert die Daten gegenüber 1 Byte/Pixel. Die echten Fellfarben setzt erst der Renderer aus dem Farb-Gen ein. |
+| Warum werden die Sprites per Script erzeugt? | Konsistenz: alle Arten teilen Kopf-/Augen-Anker, Konturen und Schattierung entstehen nach denselben Regeln. Änderungen = Script anpassen, neu generieren, Renderer per `setRenderer` tauschen. |
+| Ist das Rendern on-chain nicht zu teuer? | `tokenURI` ist ein Lesezugriff (keine Gebühr), muss aber unter dem Gas-Limit des Nodes bleiben. Optimiert (wortweises Kopieren statt Byte für Byte) von ~16 M auf ~11 M im Worst Case; Test-Grenze 15 M. |
 | Warum Snapshots auf den Karten? | Browser erlauben nur ~16 WebGL-Kontexte gleichzeitig. Ein geteilter Renderer erzeugt Standbilder, nur die Detailseite läuft live. |
 | Warum eigene Gene für Ohren und Schwanz? | Damit Breeding sichtbar wird: Mischlinge entstehen nur durch Fusion → zusätzlicher Anreiz zu fusionieren, ohne Pay-to-Win. |
 | Wie kamen 8 neue Arten dazu, ohne Pets neu zu minten? | Neuer Renderer + `setRenderer()`. Die DNA bleibt; nur die Interpretation der Gene ändert sich. Gleichzeitig der Nachteil: Bestehende Pets können dadurch eine andere Art bekommen → in Produktion Art-Zuordnung einfrieren oder versionieren. |
