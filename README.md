@@ -102,6 +102,7 @@ cd contracts && npx hardhat test          # 31 Tests inkl. E2E-Szenario + 32-Tei
 cd checkin && npm test                    # Geohash
 node sim/balance-sim.mjs                  # Balance-Tabellen + CSVs in sim/out/
 cd contracts && npx hardhat run scripts/gallery.ts   # Pet-Galerie -> docs/gallery/index.html
+cd contracts && npx hardhat run scripts/prerender-gallery.ts   # App-Galerie vorrendern -> app/public/gallery/ (nach Sprite-Aenderungen)
 ```
 
 ## NFC

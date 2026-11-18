@@ -1,0 +1,154 @@
+[
+  {
+    "title": "Arten (reinrassig)",
+    "items": [
+      {
+        "label": "Katze",
+        "file": "01.svg"
+      },
+      {
+        "label": "Fuchs",
+        "file": "02.svg"
+      },
+      {
+        "label": "Hase",
+        "file": "03.svg"
+      },
+      {
+        "label": "Bär",
+        "file": "04.svg"
+      },
+      {
+        "label": "Frosch",
+        "file": "05.svg"
+      },
+      {
+        "label": "Drache",
+        "file": "06.svg"
+      },
+      {
+        "label": "Giraffe",
+        "file": "07.svg"
+      },
+      {
+        "label": "Elefant",
+        "file": "08.svg"
+      },
+      {
+        "label": "Nashorn",
+        "file": "09.svg"
+      },
+      {
+        "label": "Krokodil",
+        "file": "10.svg"
+      },
+      {
+        "label": "Pinguin",
+        "file": "11.svg"
+      },
+      {
+        "label": "Eule",
+        "file": "12.svg"
+      },
+      {
+        "label": "Schildkröte",
+        "file": "13.svg"
+      },
+      {
+        "label": "Löwe",
+        "file": "14.svg"
+      },
+      {
+        "label": "Wolf",
+        "file": "15.svg"
+      }
+    ]
+  },
+  {
+    "title": "Mischlinge (nur durch Fusion)",
+    "items": [
+      {
+        "label": "Wolf + Fuchsohren + Löwenschwanz",
+        "file": "16.svg"
+      },
+      {
+        "label": "Löwe + Elefantenohren + Krokodilschwanz",
+        "file": "17.svg"
+      },
+      {
+        "label": "Pinguin + Eulenohren + Fuchsschwanz",
+        "file": "18.svg"
+      },
+      {
+        "label": "Krokodil + Drachenhörner + Katzenschwanz",
+        "file": "19.svg"
+      },
+      {
+        "label": "Bär + Froschaugen + Drachenschwanz",
+        "file": "20.svg"
+      }
+    ]
+  },
+  {
+    "title": "Evolution",
+    "items": [
+      {
+        "label": "Ei (Lv 1)",
+        "file": "21.svg"
+      },
+      {
+        "label": "Baby (Lv 3)",
+        "file": "22.svg"
+      },
+      {
+        "label": "Erwachsen (Lv 8)",
+        "file": "23.svg"
+      },
+      {
+        "label": "Legendär (Lv 20)",
+        "file": "24.svg"
+      }
+    ]
+  },
+  {
+    "title": "Seltene Farben, Muster & Cosmetics",
+    "items": [
+      {
+        "label": "Galaxie",
+        "file": "25.svg"
+      },
+      {
+        "label": "Gold",
+        "file": "26.svg"
+      },
+      {
+        "label": "Tigerstreifen",
+        "file": "27.svg"
+      },
+      {
+        "label": "Herz-Muster",
+        "file": "28.svg"
+      },
+      {
+        "label": "Zylinder",
+        "file": "29.svg"
+      },
+      {
+        "label": "Sonnenbrille",
+        "file": "30.svg"
+      },
+      {
+        "label": "Krone",
+        "file": "31.svg"
+      },
+      {
+        "label": "Schal",
+        "file": "32.svg"
+      },
+      {
+        "label": "Flügel",
+        "file": "33.svg"
+      }
+    ]
+  }
+]

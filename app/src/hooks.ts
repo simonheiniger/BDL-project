@@ -61,19 +61,54 @@ export type PetView = {
   attrs: Record<string, string | number>;
 };
 
-export async function loadPet(pc: PublicClient, c: Contracts, id: bigint): Promise<PetView | null> {
-  const owner = await read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "ownerOf", [id]).catch(() => null);
-  if (!owner) return null;
-  const [pet, account, uri] = await Promise.all([
-    read<Pet>(pc, c.PetNFT.address, c.PetNFT.abi, "getPet", [id]),
-    read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "accountOf", [id]),
-    read<string>(pc, c.PetNFT.address, c.PetNFT.abi, "tokenURI", [id]),
-  ]);
-  const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(uri.split(",")[1]), (c) => c.charCodeAt(0))));
+type Meta = { name: string; image: string; attrs: Record<string, string | number> };
+const metaMem = new Map<string, Meta>();
+
+/**
+ * Metadaten-Cache: tokenURI rendert die Pixel-Art on-chain (~0.7 s pro Pet, der Node arbeitet seriell).
+ * Das Bild haengt nur von DNA, Level, Generation, angezogenem Item und dem Renderer ab -> nur neu laden,
+ * wenn sich davon etwas aendert. Speicher: RAM + localStorage (zweiter Besuch laedt sofort).
+ * Grenzfall: Wird ein angezogenes Item aus der Pet-Wallet verkauft, aktualisiert sich das Bild erst beim
+ * naechsten Level-/Equip-Wechsel oder nach "Cache leeren" im Browser.
+ */
+async function petMeta(pc: PublicClient, c: Contracts, id: bigint, pet: Pet): Promise<Meta> {
+  const key = `petmeta:${c.PetRenderer.address}:${c.PetNFT.address}:${id}:${pet.dna}:${pet.level}:${pet.generation}:${pet.equipped}`;
+  const mem = metaMem.get(key);
+  if (mem) return mem;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const m = JSON.parse(stored) as Meta;
+      metaMem.set(key, m);
+      return m;
+    }
+  } catch {
+    /* Storage gesperrt (Privatmodus) */
+  }
+  const uri = await read<string>(pc, c.PetNFT.address, c.PetNFT.abi, "tokenURI", [id]);
+  const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(uri.split(",")[1]), (ch) => ch.charCodeAt(0))));
   const attrs = Object.fromEntries(
     (json.attributes as { trait_type: string; value: string | number }[]).map((a) => [a.trait_type, a.value]),
   );
-  return { id, owner, account, pet, name: json.name, image: json.image, attrs };
+  const m: Meta = { name: json.name, image: json.image, attrs };
+  metaMem.set(key, m);
+  try {
+    localStorage.setItem(key, JSON.stringify(m));
+  } catch {
+    /* voll oder gesperrt -> nur RAM-Cache */
+  }
+  return m;
+}
+
+export async function loadPet(pc: PublicClient, c: Contracts, id: bigint): Promise<PetView | null> {
+  const owner = await read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "ownerOf", [id]).catch(() => null);
+  if (!owner) return null;
+  const [pet, account] = await Promise.all([
+    read<Pet>(pc, c.PetNFT.address, c.PetNFT.abi, "getPet", [id]),
+    read<Address>(pc, c.PetNFT.address, c.PetNFT.abi, "accountOf", [id]),
+  ]);
+  const meta = await petMeta(pc, c, id, pet);
+  return { id, owner, account, pet, ...meta };
 }
 
 export function usePet(id: bigint | undefined) {
