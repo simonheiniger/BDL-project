@@ -10,6 +10,8 @@ import Market from "./pages/Market";
 import Arena from "./pages/Arena";
 import Galerie from "./pages/Galerie";
 import HousePage from "./pages/House";
+import NfcSetup from "./pages/NfcSetup";
+import { hasWallet, isMobile, metamaskLink } from "./nfc";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -17,6 +19,14 @@ function Wallet() {
   const { disconnect } = useDisconnect();
   const { data: bal } = useBalance({ address });
   if (!isConnected) {
+    // Handy-Browser (Chrome/Safari) hat kein window.ethereum -> Seite im MetaMask-App-Browser oeffnen (inkl. #k=)
+    if (isMobile() && !hasWallet()) {
+      return (
+        <a className="btn" href={metamaskLink()}>
+          In MetaMask öffnen
+        </a>
+      );
+    }
     return (
       <div className="row">
         <button className="btn" disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>
@@ -105,6 +115,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/pet/:id" element={<PetPage />} />
           <Route path="/house/:id" element={<HousePage />} />
+          <Route path="/nfc" element={<NfcSetup />} />
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />

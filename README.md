@@ -109,3 +109,10 @@ cd contracts && npx hardhat run scripts/gallery.ts   # Pet-Galerie -> docs/galle
 NTAG213/215-Sticker mit URL `https://<app-host>/pet/<id>?nfc` beschreiben (z.B. App „NFC Tools“).
 iOS und Android öffnen die URL nativ – keine Web-NFC-API nötig. Sticker in die Vertiefung unter dem Haus
 (`hardware/pet-house.scad`, `openscad -o house.stl hardware/pet-house.scad`).
+
+## NFC-Chip initialisieren (Handy)
+
+1. App-Seite `/nfc` in **Chrome auf Android** öffnen (HTTPS, NFC an). Haus-Nummer eingeben, „Chip programmieren“, NTAG213/215/216 an die Handy-Rückseite halten. Die App erzeugt den Schlüssel, schreibt `…/house/<id>#k=<key>` und liest zur Kontrolle zurück.
+2. Danach „In MetaMask öffnen“ tippen (Link `/house/<id>?settag=<Chip-Adresse>`) und auf der Hausseite „Chip übernehmen“ bestätigen (`PetHouse.setTag`).
+3. Wallet am Handy: App im MetaMask-App-Browser öffnen. Chip-Scans öffnen die URL im Standardbrowser; dort erscheint „In MetaMask öffnen“ (Schlüssel bleibt im Link).
+4. Ohne Web NFC (iOS): URLs aus `contracts/seeds/houses-<chain>.csv` mit „NFC Tools“ als URL-Record schreiben.
