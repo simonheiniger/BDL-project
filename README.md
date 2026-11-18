@@ -110,3 +110,21 @@ cd contracts && npx hardhat run scripts/prerender-gallery.ts   # App-Galerie vor
 NTAG213/215-Sticker mit URL `https://<app-host>/pet/<id>?nfc` beschreiben (z.B. App „NFC Tools“).
 iOS und Android öffnen die URL nativ – keine Web-NFC-API nötig. Sticker in die Vertiefung unter dem Haus
 (`hardware/pet-house.scad`, `openscad -o house.stl hardware/pet-house.scad`).
+
+## NFC-Chip initialisieren (Handy)
+
+1. App-Seite `/nfc` in **Chrome auf Android** öffnen (HTTPS, NFC an). Haus-Nummer eingeben, „Chip programmieren“, NTAG213/215/216 an die Handy-Rückseite halten. Die App erzeugt den Schlüssel, schreibt `…/house/<id>#k=<key>` und liest zur Kontrolle zurück.
+2. Danach „In MetaMask öffnen“ tippen (Link `/house/<id>?settag=<Chip-Adresse>`) und auf der Hausseite „Chip übernehmen“ bestätigen (`PetHouse.setTag`).
+3. Wallet am Handy: App im MetaMask-App-Browser öffnen. Chip-Scans öffnen die URL im Standardbrowser; dort erscheint „In MetaMask öffnen“ (Schlüssel bleibt im Link).
+4. Ohne Web NFC (iOS): URLs aus `contracts/seeds/houses-<chain>.csv` mit „NFC Tools“ als URL-Record schreiben.
+
+## Handy als NFC-Scanner, Logik am PC
+
+Wallet und Transaktionen bleiben am PC, das Handy scannt nur den Chip und signiert.
+
+1. PC: Hausseite (`/house/<id>`) → „Handy koppeln“ → QR-Code mit der Handy-Kamera scannen (öffnet `/phone`).
+2. Handy: Seite offen lassen, NFC-Chip scannen. Der Chip-Schlüssel bleibt auf dem Handy (localStorage, 15 min).
+3. PC: Pflege-Button → Anfrage geht über `/api/relay` ans Handy, das Handy signiert (EIP-712 `Scan`), der PC sendet `interact(...)` mit seiner Wallet.
+
+Der Relay sieht nur Anfrage und Signatur (an Spieler/Nonce gebunden, ≤ 1 h gültig). Die Pairing-ID (128 bit) steht nur im QR-Code.
+`api/relay.ts` braucht auf Vercel einen Redis-Store: Upstash-Integration (`UPSTASH_REDIS_REST_URL`/`_TOKEN`) oder Vercel KV (`KV_REST_API_URL`/`_TOKEN`). Ohne Env läuft ein In-Memory-Store (nur `npm run dev`; auf Serverless unzuverlässig).

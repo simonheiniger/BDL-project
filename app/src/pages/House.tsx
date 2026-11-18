@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { isAddress } from "viem";
 import { useAccount, useChainId } from "wagmi";
 import { ACTIONS, useContracts } from "../contracts";
 import { loadPet, useCare, useChainQuery, useHouse, useHousePets, useMyPets, usePetHousing, useTx } from "../hooks";
 import { MoodBar, NftCard, TxStatus, short, tierInfo } from "../components/common";
 import { keyAddress, parseKey, saveScan, useScan } from "../scan";
+import { hasWallet } from "../nfc";
+import { PhonePanel } from "../components/PhonePanel";
+import { usePhoneStatus, usePair, getPhonePair } from "../relay";
 
 /** Ein Bewohner mit Zufriedenheit und Pflege-Buttons (nur mit aktivem Scan) */
 function Resident({ petId, houseId, canCare, isOwner }: { petId: bigint; houseId: bigint; canCare: boolean; isOwner: boolean }) {
@@ -69,7 +73,12 @@ export default function HousePage() {
     !!myPetIds,
   );
   const tx = useTx();
+  const [search] = useSearchParams();
+  const rawTag = search.get("settag");
+  const newTag = rawTag && isAddress(rawTag) ? rawTag : null;
   const scan = useScan(chainId, id);
+  const phone = usePhoneStatus();
+  const isPhone = !!usePair("phone");
   const [scanMsg, setScanMsg] = useState<string | null>(null);
 
   // NFC-Scan: URL-Fragment #k=<Chip-Schluessel> pruefen, merken, aus der Adressleiste entfernen
@@ -82,7 +91,8 @@ export default function HousePage() {
     } else {
       setScanMsg("⚠️ Dieser Chip passt nicht zum Haus (Chip wurde neu programmiert oder URL ist falsch).");
     }
-    history.replaceState(null, "", location.pathname + location.search);
+    // Ohne Wallet (normaler Handy-Browser) Fragment behalten: der "In MetaMask öffnen"-Link braucht es
+    if (hasWallet() || getPhonePair()) history.replaceState(null, "", location.pathname + location.search);
   }, [hash, house, id, chainId]);
 
   if (isLoading) return <p className="muted">Lade…</p>;
@@ -111,7 +121,9 @@ export default function HousePage() {
           </div>
         </div>
         {scanMsg && <div className="badge nfc">{scanMsg}</div>}
-        {scan ? (
+        {isPhone ? (
+          <p className="small">📱 Dieses Handy ist als NFC-Scanner gekoppelt: {scan ? "Chip gescannt ✅ – gepflegt wird am PC." : "Chip scannen, dann am PC pflegen."}</p>
+        ) : scan ? (
           <p className="small">
             ✅ Gescannt – Pflege noch ca. {minsLeft} min freigeschaltet.
           </p>
@@ -123,13 +135,42 @@ export default function HousePage() {
         )}
       </section>
 
+      {!isPhone && <PhonePanel houseId={id} />}
+
       <h3>Bewohner</h3>
       {residents?.length === 0 && <p className="muted">Leer.</p>}
       <div className="residents">
         {residents?.map((pid) => (
-          <Resident key={pid.toString()} petId={pid} houseId={id} canCare={!!scan} isOwner={isOwner} />
+          <Resident key={pid.toString()} petId={pid} houseId={id} canCare={!!scan || (phone.online && id !== undefined && phone.houses.includes(Number(id)))} isOwner={isOwner} />
         ))}
       </div>
+
+      {isOwner && (
+        <section className="card">
+          <h3>NFC-Chip</h3>
+          {newTag && newTag.toLowerCase() !== house.tag.toLowerCase() ? (
+            <>
+              <p className="small">
+                Neuer Chip <code>{short(newTag)}</code> erkannt. Übernehmen? Der alte Chip wird damit wertlos.
+              </p>
+              <button
+                className="btn"
+                disabled={!!tx.pending}
+                onClick={() => tx.send("Chip übernehmen", { ...c.PetHouse, functionName: "setTag", args: [id, newTag] })}
+              >
+                Chip übernehmen
+              </button>
+            </>
+          ) : (
+            <p className="small muted">
+              Aktiver Chip: <code>{short(house.tag)}</code>
+            </p>
+          )}
+          <Link className="btn small" to={`/nfc?house=${id}`}>
+            Neuen Chip programmieren
+          </Link>
+        </section>
+      )}
 
       {isOwner && free > 0 && (
         <section className="card">

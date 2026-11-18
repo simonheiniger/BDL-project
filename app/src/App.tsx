@@ -10,6 +10,10 @@ import Market from "./pages/Market";
 import Arena from "./pages/Arena";
 import Galerie from "./pages/Galerie";
 import HousePage from "./pages/House";
+import NfcSetup from "./pages/NfcSetup";
+import PhonePage, { PhoneSigner } from "./pages/Phone";
+import { getPhonePair } from "./relay";
+import { hasWallet, isMobile, metamaskLink } from "./nfc";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -17,6 +21,21 @@ function Wallet() {
   const { disconnect } = useDisconnect();
   const { data: bal } = useBalance({ address });
   if (!isConnected) {
+    // Handy-Browser (Chrome/Safari) hat kein window.ethereum -> Seite im MetaMask-App-Browser oeffnen (inkl. #k=)
+    if (isMobile() && !hasWallet() && !getPhonePair()) {
+      return (
+        <a className="btn" href={metamaskLink()}>
+          In MetaMask öffnen
+        </a>
+      );
+    }
+    if (isMobile() && !hasWallet()) {
+      return (
+        <NavLink className="btn" to="/phone">
+          📱 Handy-Modus
+        </NavLink>
+      );
+    }
     return (
       <div className="row">
         <button className="btn" disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>
@@ -99,12 +118,15 @@ export default function App() {
         <NavLink to="/arena">Arena</NavLink>
         <NavLink to="/galerie">Galerie</NavLink>
       </nav>
+      <PhoneSigner />
       <main>
         <ChainGuard />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/pet/:id" element={<PetPage />} />
           <Route path="/house/:id" element={<HousePage />} />
+          <Route path="/nfc" element={<NfcSetup />} />
+          <Route path="/phone" element={<PhonePage />} />
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />

@@ -120,7 +120,10 @@ export default function Home() {
         {views?.map((v) => <NftCard key={v.id.toString()} view={v} />)}
       </div>
 
-      <h2>Meine Häuser</h2>
+      <div className="row between wrap">
+        <h2>Meine Häuser</h2>
+        <Link className="btn small" to="/nfc">📡 NFC-Chip initialisieren</Link>
+      </div>
       {houses?.length === 0 && <p className="muted">Keine. Ein Haus (mit NFC-Chip) bekommst du bei einem Host oder per 3D-Druck.</p>}
       <div className="cards">
         {houses?.map((h) => {

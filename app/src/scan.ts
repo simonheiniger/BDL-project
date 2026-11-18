@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Address, Hex, PublicClient } from "viem";
+import { getPhonePair } from "./relay";
 
 /**
  * NFC-Scan: Der Chip enthaelt die URL /house/<id>#k=<privater Chip-Schluessel>. Das Fragment geht nie an einen
@@ -11,9 +12,12 @@ const SCAN_TTL_MS = 15 * 60 * 1000;
 const EVENT = "bdl-scan";
 const storageKey = (chainId: number, houseId: bigint) => `bdl.scan.${chainId}.${houseId}`;
 
+/** Gekoppeltes Handy: Scan muss Tab-Wechsel/Schliessen ueberleben (Signer laeuft in einem anderen Tab) -> localStorage */
+const store = (): Storage => (getPhonePair() ? localStorage : sessionStorage);
+
 export function saveScan(chainId: number, houseId: bigint, key: Hex) {
   try {
-    sessionStorage.setItem(storageKey(chainId, houseId), JSON.stringify({ key, at: Date.now() }));
+    store().setItem(storageKey(chainId, houseId), JSON.stringify({ key, at: Date.now() }));
   } catch {
     /* Storage gesperrt (Privatmodus): Scan gilt dann nur bis zum Reload */
     memory.set(storageKey(chainId, houseId), { key, at: Date.now() });
@@ -27,7 +31,7 @@ export function loadScan(chainId: number, houseId: bigint): { key: Hex; expiresA
   const k = storageKey(chainId, houseId);
   let v: { key: Hex; at: number } | undefined;
   try {
-    const raw = sessionStorage.getItem(k);
+    const raw = sessionStorage.getItem(k) ?? localStorage.getItem(k);
     if (raw) v = JSON.parse(raw);
   } catch {
     /* ignorieren */
@@ -35,6 +39,27 @@ export function loadScan(chainId: number, houseId: bigint): { key: Hex; expiresA
   v ??= memory.get(k);
   if (!v || Date.now() - v.at > SCAN_TTL_MS) return null;
   return { key: v.key, expiresAt: v.at + SCAN_TTL_MS };
+}
+
+/** Alle noch gueltigen Scans dieser Chain (fuer den Handy-Signer) */
+export function listScans(chainId: number): { houseId: bigint; key: Hex }[] {
+  const out: { houseId: bigint; key: Hex }[] = [];
+  const prefix = `bdl.scan.${chainId}.`;
+  for (const st of [sessionStorage, localStorage]) {
+    try {
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i);
+        if (!k?.startsWith(prefix)) continue;
+        const houseId = BigInt(k.slice(prefix.length));
+        if (out.some((o) => o.houseId === houseId)) continue;
+        const v = loadScan(chainId, houseId);
+        if (v) out.push({ houseId, key: v.key });
+      }
+    } catch {
+      /* Storage gesperrt */
+    }
+  }
+  return out;
 }
 
 /** Reaktiv: aktueller Scan eines Hauses (laeuft nach 15 min ab) */
@@ -60,21 +85,12 @@ export function parseKey(hash: string): Hex | null {
 
 export const keyAddress = (key: Hex): Address => privateKeyToAccount(key).address;
 
-/** Scan-Signatur fuer eine Pflege-Aktion (Ablauf relativ zur Chain-Zeit, nicht zur Handy-Uhr) */
-export async function signScan(args: {
-  pc: PublicClient;
-  key: Hex;
-  chainId: number;
-  houses: Address;
-  houseId: bigint;
-  petId: bigint;
-  player: Address;
-  nonce: bigint;
-}) {
-  const block = await args.pc.getBlock();
-  const expiry = block.timestamp + 600n;
-  const signature = await privateKeyToAccount(args.key).signTypedData({
-    domain: { name: "BDL Pet House", version: "1", chainId: args.chainId, verifyingContract: args.houses },
+type ScanMsg = { chainId: number; houses: Address; houseId: bigint; petId: bigint; player: Address; nonce: bigint; expiry: bigint };
+
+/** EIP-712-Signatur des Chip-Schluessels (gleiche Struktur wie PetHouse.SCAN_TYPEHASH) */
+export function signScanWithKey(key: Hex, m: ScanMsg) {
+  return privateKeyToAccount(key).signTypedData({
+    domain: { name: "BDL Pet House", version: "1", chainId: m.chainId, verifyingContract: m.houses },
     types: {
       Scan: [
         { name: "player", type: "address" },
@@ -85,7 +101,17 @@ export async function signScan(args: {
       ],
     },
     primaryType: "Scan",
-    message: { player: args.player, petId: args.petId, houseId: args.houseId, nonce: args.nonce, expiry },
+    message: { player: m.player, petId: m.petId, houseId: m.houseId, nonce: m.nonce, expiry: m.expiry },
   });
-  return { expiry, signature };
+}
+
+/** Ablauf relativ zur Chain-Zeit, nicht zur Handy-Uhr */
+export async function scanExpiry(pc: PublicClient) {
+  return (await pc.getBlock()).timestamp + 600n;
+}
+
+/** Scan-Signatur mit lokalem Schluessel (Handy-Wallet-Modus) */
+export async function signScan(args: Omit<ScanMsg, "expiry"> & { pc: PublicClient; key: Hex }) {
+  const expiry = await scanExpiry(args.pc);
+  return { expiry, signature: await signScanWithKey(args.key, { ...args, expiry }) };
 }

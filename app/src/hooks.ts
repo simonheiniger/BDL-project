@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useBlockNumber, useChainId, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
-import { BaseError, type Abi, type Address, type PublicClient } from "viem";
+import { BaseError, type Abi, type Address, type Hex, type PublicClient } from "viem";
 import { useContracts, accountAbi, type Contracts, type Pet } from "./contracts";
-import { loadScan, signScan } from "./scan";
+import { loadScan, scanExpiry, signScan } from "./scan";
+import { getPcPair, requestScanSignature } from "./relay";
 
 /**
  * Lese-Query, die bei jedem neuen Block neu laedt (Blocknummer im Query-Key).
@@ -303,7 +304,7 @@ export function useTx() {
       setPending(null);
     }
   }
-  return { send, pending, error, setError };
+  return { send, pending, error, setError, setPending };
 }
 
 /**
@@ -316,23 +317,42 @@ export function useCare(tx: ReturnType<typeof useTx>) {
   const { address } = useAccount();
   const chainId = useChainId();
   return async (petId: bigint, houseId: bigint, action: number, label: string) => {
+    if (!pc || !c || !address) return null;
     const scan = loadScan(chainId, houseId);
-    if (!scan || !pc || !c || !address) {
-      tx.setError("Kein gültiger NFC-Scan. Chip des Hauses scannen.");
+    const pair = getPcPair();
+    if (!scan && !pair) {
+      tx.setError("Kein gültiger NFC-Scan. Chip des Hauses scannen oder ein Handy koppeln.");
       return null;
     }
     const h = await loadHouse(pc, c, houseId);
     if (!h) return null;
-    const { expiry, signature } = await signScan({
-      pc,
-      key: scan.key,
-      chainId,
-      houses: c.PetHouse.address,
-      houseId,
-      petId,
-      player: address,
-      nonce: h.nonce,
-    });
+    const msg = { chainId, houses: c.PetHouse.address, houseId, petId, player: address, nonce: h.nonce };
+    let expiry: bigint;
+    let signature: Hex;
+    try {
+      if (scan) {
+        ({ expiry, signature } = await signScan({ pc, key: scan.key, ...msg }));
+      } else {
+        // Chip-Schluessel liegt auf dem gekoppelten Handy: dort signieren lassen
+        expiry = await scanExpiry(pc);
+        tx.setError(null);
+        tx.setPending("Warte auf Handy (Chip-Signatur)");
+        ({ signature } = await requestScanSignature(pair!, {
+          chainId,
+          houses: msg.houses,
+          houseId: houseId.toString(),
+          petId: petId.toString(),
+          player: address,
+          nonce: h.nonce.toString(),
+          expiry: expiry.toString(),
+        }));
+      }
+    } catch (e) {
+      tx.setError((e as Error).message);
+      return null;
+    } finally {
+      tx.setPending(null);
+    }
     return tx.send(label, { ...c.PetNFT, functionName: "interact", args: [petId, action, expiry, signature] });
   };
 }
