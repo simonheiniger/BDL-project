@@ -18,6 +18,12 @@ interface ICosmeticsView {
     function items(uint256 id) external view returns (string memory name, uint128 price, uint64 maxSupply, uint64 minted);
 }
 
+interface IPetHouse {
+    function onMint(uint256 petId, uint256 houseId, address minter) external;
+    function onPetLeft(uint256 petId) external;
+    function scan(uint256 petId, address player, uint256 expiry, bytes calldata sig) external returns (uint256 moodBefore);
+}
+
 interface IPetRenderer {
     function tokenURI(uint256 id, Pet memory p, uint256 itemId, string memory itemName) external view returns (string memory);
 }
@@ -50,6 +56,8 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     address public trophy;
     /// @notice Bild/Metadaten-Generator. Austauschbar (Kunst kann sich weiterentwickeln, Spielwerte nicht).
     IPetRenderer public renderer;
+    /// @notice Haeuser (physische NFC-Haeuser). Pets entstehen nur in freien Plaetzen und werden nur nach Scan gepflegt.
+    IPetHouse public houses;
 
     uint256 private _nextId = 1;
     mapping(uint256 => Pet) private _pets;
@@ -70,6 +78,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     error SelfOwnership();
     error AlreadyConfigured();
     error ItemNotOwned();
+    error HousesNotSet();
 
     constructor(
         IERC6551Registry registry_,
@@ -92,6 +101,12 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         trophy = trophy_;
     }
 
+    /// @notice Einmalig nach Deploy: Haus-Contract verknuepfen.
+    function setHouses(address houses_) external onlyOwner {
+        if (address(houses) != address(0)) revert AlreadyConfigured();
+        houses = IPetHouse(houses_);
+    }
+
     /// @dev Trust-Trade-off: Owner kann das Aussehen aendern, aber nie Stats, Level oder Besitz.
     function setRenderer(IPetRenderer renderer_) external onlyOwner {
         renderer = renderer_;
@@ -100,8 +115,11 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
     // ------------------------------------------------------------------ Mint
 
-    function mint() external payable returns (uint256 petId) {
+    /// @param houseId Haus des Minters mit freiem Platz: das Pet zieht direkt ein. Ohne freien Platz kein Mint
+    ///        -> die Zahl der Pets ist durch die Zahl real gedruckter Haeuser begrenzt.
+    function mint(uint256 houseId) external payable returns (uint256 petId) {
         if (msg.value != mintPrice) revert WrongPayment();
+        if (address(houses) == address(0)) revert HousesNotSet();
         petId = _nextId++;
 
         // Pseudo-Zufall: fuer Start-Stats (5..15) akzeptabel, da wertarm.
@@ -121,6 +139,7 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         p.dna = dna | (sp << 32) | (sp << 112);
 
         _safeMint(msg.sender, petId);
+        houses.onMint(petId, houseId, msg.sender);
         address acc = registry.createAccount(accountImpl, bytes32(0), block.chainid, address(this), petId);
         emit Minted(msg.sender, petId, acc);
     }
@@ -144,8 +163,9 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
     // ------------------------------------------------------------------ Pflege-Loop
 
-    /// @notice Pflegen: +20 XP, zaehlt fuer den Fokus-Stat des naechsten Level-Ups.
-    function interact(uint256 petId, Action action) external {
+    /// @notice Pflegen: +20 XP (skaliert mit Zufriedenheit), zaehlt fuer den Fokus-Stat des naechsten Level-Ups.
+    /// @param expiry/sig Scan-Beweis: Signatur des NFC-Chips vom Haus, in dem das Pet wohnt (siehe PetHouse.scan)
+    function interact(uint256 petId, Action action, uint256 expiry, bytes calldata sig) external {
         if (ownerOf(petId) != msg.sender) revert NotPetOwner();
         Pet storage p = _pets[petId];
         if (p.level >= GameMath.MAX_LEVEL) revert MaxLevel();
@@ -157,11 +177,16 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
         }
         if (p.actionsToday >= maxActionsPerDay) revert DailyLimit();
 
+        // NFC-Scan zwingend. Zufriedenheit (vor dieser Pflege) skaliert den XP-Ertrag: <50 -> 50..100 %, sonst 100 %.
+        // Bessere Haeuser geben nie mehr als 100 %, sie halten nur laenger zufrieden (kein Pay-to-Win).
+        uint256 mood = houses.scan(petId, msg.sender, expiry, sig);
+        uint256 gain = XP_PER_ACTION * (mood >= 50 ? 100 : 50 + mood) / 100;
+
         p.actionsToday++;
         p.lastAction = uint64(block.timestamp);
         p.focus[uint8(action)]++;
 
-        uint256 xp = p.xp + XP_PER_ACTION;
+        uint256 xp = p.xp + gain;
         uint256 level = p.level;
         while (level < GameMath.MAX_LEVEL && xp >= GameMath.xpToNext(level)) {
             xp -= GameMath.xpToNext(level);
@@ -249,6 +274,8 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     ///      niemand koennte je wieder signieren -> Pet + Inventar fuer immer gesperrt.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         if (to != address(0) && to == accountOf(tokenId)) revert SelfOwnership();
+        // Verkauf, Transfer oder Burn: Pet verlaesst sein Haus (Platz frei, Kaeufer muss in ein eigenes Haus ziehen)
+        if (_ownerOf(tokenId) != address(0)) houses.onPetLeft(tokenId);
         return super._update(to, tokenId, auth);
     }
 

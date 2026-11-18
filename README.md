@@ -14,8 +14,23 @@ Jedes Pet ist ein ERC-721-NFT mit **eigener Wallet (ERC-6551 Token Bound Account
 | `app/` | PWA (Vite, React, wagmi/viem, Three.js: Low-Poly-3D-Tiere prozedural aus der DNA, Galerie unter `/galerie`) |
 | `checkin/` | Check-in-Service: prüft Standort (Geohash), signiert EIP-712 |
 | `sim/` | Balance-Simulation (XP-Kurve, Gewinnchancen, Fusion, Supply) |
-| `hardware/` | Parametrisches NFC-Haus (OpenSCAD) |
+| `hardware/` | 5 Haus-Stufen (Hütte bis Villa) als OpenSCAD, 4 Farben, Platz für NFC-Sticker; `render.sh` exportiert STLs |
 | `docs/` | [Konzept](docs/konzept.md), [Designentscheidungen / Q&A](docs/entscheidungen.md) |
+
+## Häuser & NFC (Pets müssen "ausgelagert" werden)
+
+Pets entstehen nur in einem freien Platz eines **Hauses** (`PetHouse`, ERC-721 = physisches 3D-Haus mit NFC-Chip).
+Stufe bestimmt Plätze und Zufriedenheit: Hütte 1 Platz / −40 pro Tag · Bauernhaus 2 / −30 · Cottage 3 / −20 ·
+Herrenhaus 4 / −12 · Villa 5 / −6. Zufriedenheit < 50 → Pflege gibt nur 50–100 % XP (bessere Häuser geben nie mehr als
+100 %, sie sparen nur Pflegeaufwand). **Pflegen geht nur nach NFC-Scan**: Der Chip enthält `/house/<id>#k=<Schlüssel>`;
+die App signiert damit (EIP-712) jede Pflege, der Contract prüft gegen die Chip-Adresse (Nonce, Ablauf, Spieler gebunden).
+Verkaufte Pets verlassen ihr Haus; ein Haus ist nur übertragbar, wenn es leer ist (`setTag` programmiert den Chip neu).
+
+```bash
+cd contracts
+TIERS=0,2,4 npx hardhat run scripts/mint-houses.ts --network bdl   # Häuser prägen, URLs -> seeds/houses-<chain>.csv (gitignored)
+cd ../hardware && ./render.sh                                      # STLs nach hardware/out/
+```
 
 ## Lokal starten (Demo)
 

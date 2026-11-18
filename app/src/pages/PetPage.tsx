@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { useAccount } from "wagmi";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useAccount, useChainId } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 import { ACTIONS, ITEM_EMOJI, STAT_NAMES, ZERO, accountAbi, useContracts, zoneString } from "../contracts";
-import { useChainQuery, useInventory, usePet, useShopItems, useTx } from "../hooks";
-import { NftCard, StatBars, Traits, TxStatus, XpBar, petInput, short } from "../components/common";
+import { useCare, useChainQuery, useHouse, useInventory, usePet, usePetHousing, useShopItems, useTx } from "../hooks";
+import { useScan } from "../scan";
+import { MoodBar, NftCard, StatBars, Traits, TxStatus, XpBar, petInput, short, tierInfo } from "../components/common";
 import PetCanvas from "../three/PetCanvas";
 
 export default function PetPage() {
@@ -17,6 +18,11 @@ export default function PetPage() {
   const { data: inv } = useInventory(view?.account);
   const { data: items } = useShopItems();
   const tx = useTx();
+  const care = useCare(tx);
+  const chainId = useChainId();
+  const { data: housing } = usePetHousing(id);
+  const { data: house } = useHouse(housing && housing.houseId > 0n ? housing.houseId : undefined);
+  const scan = useScan(chainId, housing?.houseId);
   const [awake, setAwake] = useState(search.has("nfc"));
   const [price, setPrice] = useState("0.05");
 
@@ -59,6 +65,26 @@ export default function PetPage() {
         <NftCard view={view} size="lg" link={false} art={<PetCanvas input={petInput(view)} awake={awake} />} />
         <div className="grow card">
           {search.has("nfc") && <div className="badge nfc">📡 NFC-Haus gescannt – Pet aufgeweckt!</div>}
+          {housing && (
+            <>
+              <div className="row between small">
+                <span>
+                  {housing.houseId > 0n && house ? (
+                    <>
+                      {tierInfo(house.tier).emoji}{" "}
+                      <Link to={`/house/${housing.houseId}`}>
+                        {tierInfo(house.tier).name} #{housing.houseId.toString()}
+                      </Link>
+                    </>
+                  ) : (
+                    "⛺ Kein Haus"
+                  )}
+                </span>
+                <span className="muted">Zufriedenheit{housing.houseId === 0n && " (eingefroren)"}</span>
+              </div>
+              <MoodBar mood={housing.mood} />
+            </>
+          )}
           <div className="muted small">
             Token #{view.id.toString()} · {Number(pet.fusionCount)} Fusionen · Owner {short(view.owner)} {isOwner && "(du)"}
           </div>
@@ -78,8 +104,21 @@ export default function PetPage() {
       {isOwner && (
         <section className="card">
           <h3>Pflegen</h3>
+          {housing && housing.houseId === 0n && (
+            <p className="warn-text">
+              ⛺ Dieses Pet wohnt in keinem Haus und kann nicht gepflegt werden. Lass es in ein Haus mit freiem Platz
+              einziehen (Hausseite) – Pets leben in physischen NFC-Häusern.
+            </p>
+          )}
+          {housing && housing.houseId > 0n && !scan && (
+            <p className="warn-text">
+              📡 <strong>Scanne den NFC-Chip von Haus #{housing.houseId.toString()}</strong> mit dem Handy, um dieses Pet zu
+              pflegen. Der Scan gilt 15 Minuten.
+            </p>
+          )}
           <p className="muted small">
-            +20 XP pro Aktion. Die meistgenutzte Aktion bestimmt den Fokus-Stat beim nächsten Level-Up (+3 statt +1).
+            +20 XP pro Aktion (bei Zufriedenheit unter 50 weniger). Die meistgenutzte Aktion bestimmt den Fokus-Stat beim
+            nächsten Level-Up (+3 statt +1).
             {timing && ` Cooldown ${timing.cooldown}s, max. ${timing.maxPerDay} Aktionen/Tag (heute: ${Number(pet.actionsToday)}).`}
           </p>
           <div className="row wrap">
@@ -87,10 +126,10 @@ export default function PetPage() {
               <button
                 key={a.label}
                 className="btn"
-                disabled={!!tx.pending}
-                onClick={() => {
+                disabled={!!tx.pending || !scan || !housing || housing.houseId === 0n}
+                onClick={async () => {
                   setAwake(true);
-                  tx.send(a.label, { ...c.PetNFT, functionName: "interact", args: [id, i] });
+                  await care(id!, housing!.houseId, i, a.label);
                 }}
               >
                 {a.emoji} {a.label} <span className="muted">({a.stat}, Fokus {Number(pet.focus[i])})</span>
@@ -216,9 +255,6 @@ export default function PetPage() {
         </section>
       )}
 
-      <p className="muted small">
-        NFC-Tag-URL für dieses Pet: <code>{`${location.origin}/pet/${view.id}?nfc`}</code>
-      </p>
       <p className="muted small">Stats: {STAT_NAMES.join(", ")} – Kosmetik beeinflusst sie nie.</p>
     </>
   );

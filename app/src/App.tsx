@@ -9,6 +9,7 @@ import Fusion from "./pages/Fusion";
 import Market from "./pages/Market";
 import Arena from "./pages/Arena";
 import Gallery3D from "./pages/Gallery3D";
+import HousePage from "./pages/House";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -103,6 +104,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/pet/:id" element={<PetPage />} />
+          <Route path="/house/:id" element={<HousePage />} />
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
           <Route path="/arena" element={<Arena />} />

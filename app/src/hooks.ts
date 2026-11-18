@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useBlockNumber, useChainId, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { BaseError, type Abi, type Address, type PublicClient } from "viem";
 import { useContracts, accountAbi, type Contracts, type Pet } from "./contracts";
+import { loadScan, signScan } from "./scan";
 
 /**
  * Lese-Query, die bei jedem neuen Block neu laedt (Blocknummer im Query-Key).
@@ -79,6 +80,75 @@ export function usePet(id: bigint | undefined) {
   return useChainQuery(["pet", id?.toString()], (pc, c) => loadPet(pc, c, id!), id !== undefined);
 }
 
+export type HouseView = { id: bigint; owner: Address; tier: number; occupants: number; tag: Address; nonce: bigint };
+
+export async function loadHouse(pc: PublicClient, c: Contracts, id: bigint): Promise<HouseView | null> {
+  const a = c.PetHouse;
+  const owner = await read<Address>(pc, a.address, a.abi, "ownerOf", [id]).catch(() => null);
+  if (!owner) return null;
+  const [tier, occupants, tag, nonce] = await read<[number, number, Address, bigint]>(pc, a.address, a.abi, "houses", [id]);
+  return { id, owner, tier: Number(tier), occupants: Number(occupants), tag, nonce };
+}
+
+export function useHouse(id: bigint | undefined) {
+  return useChainQuery(["house", id?.toString()], (pc, c) => loadHouse(pc, c, id!), id !== undefined && id > 0n);
+}
+
+/** Eigene Haeuser (Transfer-Events wie bei den Pets) */
+export function useMyHouses() {
+  const { address } = useAccount();
+  return useChainQuery(
+    ["myHouses", address],
+    async (pc, c) => {
+      const logs = await pc.getContractEvents({
+        address: c.PetHouse.address,
+        abi: c.PetHouse.abi,
+        eventName: "Transfer",
+        args: { to: address },
+        fromBlock: 0n,
+      });
+      const ids = [...new Set(logs.map((l) => (l as unknown as { args: { tokenId: bigint } }).args.tokenId))];
+      const houses = await Promise.all(ids.map((id) => loadHouse(pc, c, id)));
+      return houses.filter((h): h is HouseView => !!h && h.owner.toLowerCase() === address!.toLowerCase()).sort((a, b) => Number(a.id - b.id));
+    },
+    !!address,
+  );
+}
+
+/** Wo wohnt das Pet (0 = nirgends) und wie zufrieden ist es (0..100) */
+export function usePetHousing(petId: bigint | undefined) {
+  return useChainQuery(
+    ["housing", petId?.toString()],
+    async (pc, c) => {
+      const a = c.PetHouse;
+      const [houseId, mood] = await Promise.all([
+        read<bigint>(pc, a.address, a.abi, "houseOf", [petId]),
+        read<bigint>(pc, a.address, a.abi, "moodOf", [petId]),
+      ]);
+      return { houseId, mood: Number(mood) };
+    },
+    petId !== undefined,
+  );
+}
+
+/** Pets, die in einem Haus wohnen (Event-Log: MovedIn minus MovedOut, danach gegen houseOf geprueft) */
+export function useHousePets(houseId: bigint | undefined) {
+  return useChainQuery(
+    ["housePets", houseId?.toString()],
+    async (pc, c) => {
+      const a = c.PetHouse;
+      const logs = await pc.getContractEvents({ address: a.address, abi: a.abi, eventName: "MovedIn", args: { houseId }, fromBlock: 0n });
+      const ids = [...new Set(logs.map((l) => (l as unknown as { args: { petId: bigint } }).args.petId))];
+      const inside: bigint[] = [];
+      for (const id of ids) {
+        if ((await read<bigint>(pc, a.address, a.abi, "houseOf", [id])) === houseId) inside.push(id);
+      }
+      return inside.sort((x, y) => Number(x - y));
+    },
+    houseId !== undefined && houseId > 0n,
+  );
+}
+
 export type Item = { id: number; name: string; price: bigint; maxSupply: bigint; minted: bigint };
 
 export function useShopItems() {
@@ -151,6 +221,12 @@ function friendlyError(e: unknown): string {
       "Lösung: MetaMask → Einstellungen → Erweitert → „Aktivitäts-Tab-Daten löschen“, dann nochmal versuchen."
     );
   }
+  if (/NotHoused/.test(raw)) return "Dieses Pet wohnt in keinem Haus. Erst einziehen lassen.";
+  if (/HouseFull/.test(raw)) return "Das Haus ist voll. Bessere Häuser haben mehr Plätze.";
+  if (/NotHouseOwner/.test(raw)) return "Dieses Haus gehört dir nicht.";
+  if (/ScanExpired/.test(raw)) return "Der Scan ist abgelaufen. Chip erneut scannen.";
+  if (/BadScan/.test(raw)) return "Scan ungültig (falscher oder bereits ersetzter Chip). Chip erneut scannen.";
+  if (/HouseNotEmpty/.test(raw)) return "Haus erst leeren: alle Pets ausziehen lassen.";
   if (/insufficient funds/i.test(raw)) return "Zu wenig TEST-ETH auf diesem Account.";
   if (/user rejected|denied/i.test(raw)) return "In MetaMask abgebrochen.";
   return e instanceof BaseError ? e.shortMessage : (e as Error).message;
@@ -193,4 +269,35 @@ export function useTx() {
     }
   }
   return { send, pending, error, setError };
+}
+
+/**
+ * Pflegen = Scan-Signatur des Chip-Schluessels + interact(). Ohne frischen NFC-Scan (loadScan) gibt es keine Signatur,
+ * und der Contract lehnt die Pflege ab.
+ */
+export function useCare(tx: ReturnType<typeof useTx>) {
+  const pc = usePublicClient();
+  const c = useContracts();
+  const { address } = useAccount();
+  const chainId = useChainId();
+  return async (petId: bigint, houseId: bigint, action: number, label: string) => {
+    const scan = loadScan(chainId, houseId);
+    if (!scan || !pc || !c || !address) {
+      tx.setError("Kein gültiger NFC-Scan. Chip des Hauses scannen.");
+      return null;
+    }
+    const h = await loadHouse(pc, c, houseId);
+    if (!h) return null;
+    const { expiry, signature } = await signScan({
+      pc,
+      key: scan.key,
+      chainId,
+      houses: c.PetHouse.address,
+      houseId,
+      petId,
+      player: address,
+      nonce: h.nonce,
+    });
+    return tx.send(label, { ...c.PetNFT, functionName: "interact", args: [petId, action, expiry, signature] });
+  };
 }

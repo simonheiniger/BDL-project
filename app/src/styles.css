@@ -523,3 +523,42 @@ tr.winner {
 .onboarding li {
   margin: 6px 0;
 }
+
+/* ------------------------------------------------------------ Haeuser / Zufriedenheit */
+.houseicon {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+.househead {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.housecard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-decoration: none;
+  color: var(--text);
+  min-width: 190px;
+}
+.residents {
+  display: grid;
+  gap: 12px;
+}
+.resident {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bar.mood > div {
+  background: var(--accent2);
+}
+.bar.mood.low > div {
+  background: var(--danger);
+}
+.warn-text {
+  color: var(--danger);
+}
