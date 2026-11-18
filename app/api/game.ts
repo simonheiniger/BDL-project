@@ -12,7 +12,9 @@ import { GAME_KINDS, memoryLayout, memoryResult, quizRound, QUIZ, quizResult, ra
 
 // Lokal (Hardhat): oeffentlicher Test-Key #6. Auf Vercel MUSS GAME_PRIVATE_KEY gesetzt sein.
 const DEV_KEY = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
-const KEY = (process.env.GAME_PRIVATE_KEY ?? (process.env.VERCEL ? "" : DEV_KEY)) as `0x${string}`;
+// Key robust einlesen: Leerzeichen/Zeilenumbruch weg, fehlendes 0x ergaenzen (haeufiger Copy-Paste-Fehler im Vercel-Dashboard)
+const RAW = (process.env.GAME_PRIVATE_KEY ?? (process.env.VERCEL ? "" : DEV_KEY)).trim();
+const KEY = (RAW && !RAW.startsWith("0x") ? `0x${RAW}` : RAW) as `0x${string}`;
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const VOUCHER_TTL_S = 7 * 24 * 3600;
 const MIN_MS: Record<GameKind, number> = { memory: 8000, quiz: 10000, race: 0 };
@@ -46,6 +48,15 @@ function open(token: string): Round | null {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  try {
+    return await handle(request);
+  } catch (e) {
+    console.error(e);
+    return json({ error: `Spiele-Server-Fehler: ${(e as Error).message.split("\n")[0]}` }, 500);
+  }
+}
+
+async function handle(request: Request): Promise<Response> {
   if (!KEY) return json({ error: "Spiele nicht konfiguriert (GAME_PRIVATE_KEY fehlt)" }, 500);
   let body: Record<string, unknown>;
   try {

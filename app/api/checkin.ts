@@ -41,7 +41,8 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
 export async function POST(request: Request): Promise<Response> {
-  const key = process.env.CHECKIN_PRIVATE_KEY as `0x${string}` | undefined;
+  const raw = process.env.CHECKIN_PRIVATE_KEY?.trim(); // Copy-Paste-Fehler abfangen (Leerzeichen, fehlendes 0x)
+  const key = (raw && !raw.startsWith("0x") ? `0x${raw}` : raw) as `0x${string}` | undefined;
   if (!key) return json({ error: "Check-in nicht konfiguriert (CHECKIN_PRIVATE_KEY fehlt)" }, 500);
   if (!ARENA) return json({ error: "kein Arena-Deployment fuer chainId 24888" }, 500);
 
