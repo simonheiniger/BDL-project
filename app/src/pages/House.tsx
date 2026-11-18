@@ -8,7 +8,7 @@ import { MoodBar, NftCard, TxStatus, short, tierInfo } from "../components/commo
 import { keyAddress, parseKey, saveScan, useScan } from "../scan";
 import { hasWallet } from "../nfc";
 import { PhonePanel } from "../components/PhonePanel";
-import { usePhoneStatus, usePair, getPhonePair } from "../relay";
+import { usePhoneStatus, usePair, getPhonePair, clearPhonePair } from "../relay";
 
 /** Ein Bewohner mit Zufriedenheit und Pflege-Buttons (nur mit aktivem Scan) */
 function Resident({ petId, houseId, canCare, isOwner }: { petId: bigint; houseId: bigint; canCare: boolean; isOwner: boolean }) {
@@ -122,7 +122,12 @@ export default function HousePage() {
         </div>
         {scanMsg && <div className="badge nfc">{scanMsg}</div>}
         {isPhone ? (
-          <p className="small">📱 Dieses Handy ist als NFC-Scanner gekoppelt: {scan ? "Chip gescannt ✅ – gepflegt wird am PC." : "Chip scannen, dann am PC pflegen."}</p>
+          <p className="small">
+            📱 Dieses Gerät ist als NFC-Scanner gekoppelt: {scan ? "Chip gescannt ✅ – gepflegt wird am PC." : "Chip scannen, dann am PC pflegen."}{" "}
+            <button className="btn small" onClick={clearPhonePair}>
+              Kopplung lösen
+            </button>
+          </p>
         ) : scan ? (
           <p className="small">
             ✅ Gescannt – Pflege noch ca. {minsLeft} min freigeschaltet.

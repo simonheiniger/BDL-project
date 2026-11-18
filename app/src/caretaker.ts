@@ -21,6 +21,16 @@ export function caretakerKey(): Hex {
   }
 }
 
+/** Neue Identitaet: alten Schluessel verwerfen (Abmelden). Die alte Freigabe am PC danach widerrufen. */
+export function resetCaretakerKey() {
+  memory.key = undefined;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* ignorieren */
+  }
+}
+
 export const caretakerAddress = (): Address => privateKeyToAccount(caretakerKey()).address;
 
 /** Kurzcode zum Abgleichen am PC (gegen Unterschieben einer fremden Adresse) */

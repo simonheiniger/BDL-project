@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { isAddress, type Address } from "viem";
 import { useChainId } from "wagmi";
 import deployments from "../contracts/deployments.json";
+import { hasWallet, isMobile } from "../nfc";
 import { clearPhonePair, isPairId, phoneHello, phoneNext, phoneRespond, setPhonePair, usePair, type ScanRequest } from "../relay";
 import { listScans, signScanWithKey } from "../scan";
 
@@ -81,10 +82,11 @@ export default function PhonePage() {
   const [, tick] = useState(0);
   useEffect(() => {
     const m = /p=([0-9a-f]{32})/.exec(location.hash);
-    if (m && isPairId(m[1])) {
+    // Ein PC mit Wallet ist kein Handy: sonst bleibt er "gekoppelt" und blendet die PC-Funktionen aus
+    if (m && isPairId(m[1]) && (isMobile() || !hasWallet())) {
       setPhonePair(m[1]);
-      history.replaceState(null, "", location.pathname);
     }
+    if (m) history.replaceState(null, "", location.pathname);
     const f = () => tick((n) => n + 1);
     window.addEventListener(LOG_EVENT, f);
     const t = setInterval(f, 5000);
@@ -105,6 +107,9 @@ export default function PhonePage() {
   return (
     <>
       <h2>Handy als NFC-Scanner</h2>
+      {!isMobile() && hasWallet() && (
+        <p className="card warn">Dieser Link ist für das Handy. Am PC bleibt alles wie es ist – QR-Code mit dem Handy scannen.</p>
+      )}
       {!pair ? (
         <p className="card warn">
           Nicht gekoppelt. Am PC in der App „Handy koppeln“ wählen und den QR-Code mit der Handy-Kamera scannen.

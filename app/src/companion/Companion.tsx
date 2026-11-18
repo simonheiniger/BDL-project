@@ -6,9 +6,9 @@ import { ACTIONS, useContracts } from "../contracts";
 import { config } from "../wagmi";
 import { friendlyError, loadHouse, loadPet, useChainQuery, useHouse, useMyPets, usePetHousing } from "../hooks";
 import { MoodBar, NftCard, short, tierInfo } from "../components/common";
-import { caretakerAddress, fingerprint, loadGrants, sendAsCaretaker, sendCare, type Grant } from "../caretaker";
+import { caretakerAddress, fingerprint, loadGrants, resetCaretakerKey, sendAsCaretaker, sendCare, type Grant } from "../caretaker";
 import { keyAddress, listScans, loadScan, saveScan, scanExpiry, signScanWithKey, useScan } from "../scan";
-import { clearPhonePair, isPairId, phoneRegister, setPhonePair, usePair } from "../relay";
+import { claimPairCode, clearPhonePair, isPairId, phoneRegister, setPhonePair, usePair } from "../relay";
 import { onOpenUrl } from "../native";
 
 /**
@@ -170,7 +170,9 @@ function OwnerPets({ owner, until, scanTick }: { owner: Address; until: number; 
 }
 
 export default function Companion() {
+  const [identity, setIdentity] = useState(0); // erhoeht sich beim Abmelden -> neuer Schluessel
   const me = caretakerAddress();
+  void identity;
   const chainId = useChainId();
   const c = useContracts();
   const pair = usePair("phone");
@@ -180,6 +182,32 @@ export default function Companion() {
   const pc = usePublicClient();
   const { data: bal } = useBalance({ address: me });
   const { data: grants } = useChainQuery<Grant[]>(["grants", me], (pc, c) => loadGrants(pc, c, me));
+
+  async function pairFromInput() {
+    const text = manual.trim();
+    try {
+      if (/^\d{8}$/.test(text)) {
+        const { pair: id } = await claimPairCode(text);
+        await register(id);
+      } else {
+        const id = pairIdFrom(text);
+        if (!id || !isPairId(id)) throw new Error("Weder Code (8 Ziffern) noch Kopplungs-Link erkannt");
+        await register(id);
+      }
+      setManual("");
+    } catch (e) {
+      setMsg(`⚠️ ${(e as Error).message}`);
+    }
+  }
+
+  function logout() {
+    if (!confirm("Dieses Handy abmelden? Es bekommt einen neuen Schlüssel; die alte Freigabe am PC bitte widerrufen.")) return;
+    resetCaretakerKey();
+    clearPhonePair();
+    for (const k of Object.keys(localStorage)) if (k.startsWith("bdl.scan.")) localStorage.removeItem(k);
+    setMsg(null);
+    setIdentity((n) => n + 1);
+  }
 
   async function register(id: string) {
     setPhonePair(id);
@@ -246,15 +274,8 @@ export default function Companion() {
               </li>
             </ol>
             <div className="row">
-              <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Kopplungs-Link einfügen" />
-              <button
-                className="btn small"
-                disabled={!pairIdFrom(manual)}
-                onClick={() => {
-                  const id = pairIdFrom(manual);
-                  if (id && isPairId(id)) register(id);
-                }}
-              >
+              <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="8-stelliger Code oder Kopplungs-Link" inputMode="text" />
+              <button className="btn small" disabled={!manual.trim()} onClick={pairFromInput}>
                 Koppeln
               </button>
             </div>
@@ -284,11 +305,17 @@ export default function Companion() {
           </p>
           {lowGas && <p className="warn-text small">Gas fast leer: am PC „Handy freigeben“ mit etwas ETH erneut ausführen.</p>}
           <p className="muted small">Dieser Schlüssel darf nur pflegen. Verlust: am PC „Freigabe widerrufen“.</p>
-          {pair && (
-            <button className="btn small" onClick={clearPhonePair}>
-              Kopplung vergessen
-            </button>
+          {grants && grants.length > 0 && (
+            <div className="row">
+              <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Code/Link für neues Gerät" />
+              <button className="btn small" disabled={!manual.trim()} onClick={pairFromInput}>
+                Neu koppeln
+              </button>
+            </div>
           )}
+          <button className="btn small" onClick={logout}>
+            Abmelden / neues Konto koppeln
+          </button>
         </section>
       </main>
     </div>

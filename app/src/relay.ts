@@ -124,3 +124,7 @@ export const phoneRespond = (pair: string, id: string, sig: Hex, expiry: bigint)
 
 /** Handy-App meldet die Adresse ihres Caretaker-Schluessels (der PC zeigt sie zur Freigabe an) */
 export const phoneRegister = (pair: string, address: Address) => call({ a: "register", pair, address });
+
+/** Kurzer Einmal-Code (8 Ziffern, 5 min) als Alternative zum QR-Code */
+export const requestPairCode = (pair: string) => call<{ code: string; ttl: number }>({ a: "code", pair });
+export const claimPairCode = (code: string) => call<{ pair: string }>({ a: "claim", code });

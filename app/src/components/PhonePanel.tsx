@@ -5,7 +5,7 @@ import { formatEther, parseEther, type Address } from "viem";
 import { useContracts } from "../contracts";
 import { useChainQuery, useTx } from "../hooks";
 import { TxStatus, short } from "./common";
-import { clearPcPair, newPcPair, pairUrl, usePair, usePhoneStatus } from "../relay";
+import { clearPcPair, newPcPair, pairUrl, requestPairCode, usePair, usePhoneStatus } from "../relay";
 
 const GRANT_DAYS = 30n;
 
@@ -86,6 +86,25 @@ export function PhonePanel({ houseId }: { houseId?: bigint }) {
   const st = usePhoneStatus();
   const [qr, setQr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [code, setCode] = useState<{ code: string; until: number } | null>(null);
+  const [codeErr, setCodeErr] = useState<string | null>(null);
+  const [, tick] = useState(0);
+
+  async function makeCode() {
+    if (!pair) return;
+    setCodeErr(null);
+    try {
+      const r = await requestPairCode(pair);
+      setCode({ code: r.code, until: Date.now() + r.ttl * 1000 });
+    } catch (e) {
+      setCodeErr((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => setCode(null), [pair]);
 
   useEffect(() => {
     if (!pair) return setQr(null);
@@ -118,10 +137,23 @@ export function PhonePanel({ houseId }: { houseId?: bigint }) {
           {(open || (!st.online && !st.caretaker)) && qr && (
             <>
               <img src={qr} alt="QR-Code zum Koppeln" width={240} height={240} style={{ background: "#fff", borderRadius: 8 }} />
-              <p className="muted small">
-                QR-Code mit der Handy-Kamera scannen: öffnet die BDL-Pets-App (oder im Browser den Scanner-Modus).
-              </p>
+              <p className="muted small">QR-Code mit der Handy-Kamera scannen. Klappt das nicht: Code in der App eingeben.</p>
             </>
+          )}
+          {!st.caretaker && (
+            <div className="small">
+              {code && code.until > Date.now() ? (
+                <p>
+                  Kopplungs-Code: <strong style={{ letterSpacing: "0.15em", fontSize: "1.3em" }}>{code.code}</strong>{" "}
+                  <span className="muted">(noch {Math.ceil((code.until - Date.now()) / 1000)} s, einmalig)</span>
+                </p>
+              ) : (
+                <button className="btn small" onClick={makeCode}>
+                  Code statt QR erzeugen
+                </button>
+              )}
+              {codeErr && <p className="warn-text">⚠️ {codeErr}</p>}
+            </div>
           )}
           <div className="row">
             <button className="btn small" onClick={() => setOpen((o) => !o)}>
@@ -130,6 +162,11 @@ export function PhonePanel({ houseId }: { houseId?: bigint }) {
             <button className="btn small" onClick={clearPcPair}>
               Kopplung lösen
             </button>
+            {st.caretaker && (
+              <button className="btn small" onClick={() => (newPcPair(), setOpen(true))} title="Neuer QR-Code für ein anderes Handy">
+                Anderes Handy koppeln
+              </button>
+            )}
           </div>
         </>
       )}
