@@ -707,3 +707,36 @@ describe("Caretaker (Handy-App darf nur pflegen)", () => {
     await expect(pets.connect(alice).authorizeCaretaker(phone.address, now + 91n * 86400n)).to.be.revertedWithCustomError(pets, "InvalidExpiry");
   });
 });
+
+describe("Caretaker: Ein-/Auslagern (Handy-App)", () => {
+  it("Caretaker darf Pets aus- und einziehen lassen; Fremde und abgelaufene Caretaker nicht", async () => {
+    const { pets, houses, alice, bob } = await loadFixture(fast);
+    const phone = ethers.Wallet.createRandom().connect(ethers.provider);
+    const stranger = ethers.Wallet.createRandom().connect(ethers.provider);
+    await alice.sendTransaction({ to: phone.address, value: ethers.parseEther("1") });
+    await alice.sendTransaction({ to: stranger.address, value: ethers.parseEther("1") });
+    const h1 = await mintHouse(houses, alice.address, 1);
+    const { id } = await mintPet(pets, alice, h1);
+
+    // ohne Berechtigung: nein
+    await expect(houses.connect(phone).moveOut(id)).to.be.revertedWithCustomError(houses, "NotPetOwner");
+
+    const until = BigInt(await time.latest()) + 30n * 86400n;
+    await pets.connect(alice).authorizeCaretaker(phone.address, until);
+    await houses.connect(phone).moveOut(id);
+    expect(await houses.houseOf(id)).to.equal(0n);
+    await expect(houses.connect(stranger).moveIn(id, h1)).to.be.revertedWithCustomError(houses, "NotPetOwner");
+
+    // einziehen: nur in Haeuser desselben Besitzers
+    const bobHouse = await mintHouse(houses, bob.address, 1);
+    await expect(houses.connect(phone).moveIn(id, bobHouse)).to.be.revertedWithCustomError(houses, "NotHouseOwner");
+    await houses.connect(phone).moveIn(id, h1);
+    expect(await houses.houseOf(id)).to.equal(h1);
+
+    // abgelaufen
+    await time.increaseTo(until + 1n);
+    await expect(houses.connect(phone).moveOut(id)).to.be.revertedWithCustomError(houses, "NotPetOwner");
+    // Besitzer selbst kann weiterhin
+    await houses.connect(alice).moveOut(id);
+  });
+});

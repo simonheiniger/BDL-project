@@ -6,7 +6,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import deployments from "../src/contracts/deployments.json";
 import abis from "../src/contracts/abis.json";
-import { caretakerAddress, loadGrants, sendCare } from "../src/caretaker";
+import { caretakerAddress, loadGrants, sendAsCaretaker, sendCare } from "../src/caretaker";
 import { scanExpiry, signScanWithKey } from "../src/scan";
 import type { Abi, Address } from "viem";
 
@@ -73,6 +73,12 @@ try {
   replay = true;
 }
 ok(replay, "Replay derselben Signatur wird abgelehnt");
+
+// Ein-/Auslagern per Caretaker
+await sendAsCaretaker({ pc, chain, target: PetHouse, functionName: "moveOut", args: [petId] });
+ok(((await pc.readContract({ ...PetHouse, functionName: "houseOf", args: [petId] })) as bigint) === 0n, "Handy hat das Pet ausgelagert");
+await sendAsCaretaker({ pc, chain, target: PetHouse, functionName: "moveIn", args: [petId, houseId] });
+ok(((await pc.readContract({ ...PetHouse, functionName: "houseOf", args: [petId] })) as bigint) === houseId, "Handy hat das Pet wieder eingelagert");
 
 await send(PetNFT, "revokeCaretaker", [phone]);
 ok((await loadGrants(pc, contracts, phone)).length === 0, "nach Widerruf keine Grants");

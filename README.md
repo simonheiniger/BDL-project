@@ -150,3 +150,13 @@ npm run native:apk                                            # android/app/buil
 Damit ein Chip-Scan die App ohne Auswahldialog öffnet, muss `https://<domain>/.well-known/assetlinks.json` den SHA-256-Fingerabdruck des APK-Zertifikats enthalten (Digital Asset Links, Paket `ch.zhaw.bdl.pets`); ohne das fragt Android einmalig „Öffnen mit“.
 
 **Contracts neu deployen** (neue Funktionen `authorizeCaretaker`/`revokeCaretaker` in `PetNFT`): `npx hardhat run scripts/deploy.ts --network bdl`. Integrationstest des Handy-Wegs gegen einen lokalen Node: `npx hardhat node`, deploy mit `--network localhost`, dann `cd app && npx tsx scripts/e2e-caretaker.ts`.
+
+## Entwickler-Tool: Häuser definieren (`/admin`)
+
+Nur der Owner des `PetHouse`-Contracts (Deployer-Wallet) kann Häuser prägen (`mintHouse` ist `onlyOwner`, das erzwingt der Contract). Spieler können weder Häuser erzeugen noch ihre Stufe ändern.
+
+1. PC: `https://<domain>/admin` mit der Entwickler-Wallet öffnen. Stufe, Anzahl und Besitzer wählen → „Häuser prägen“ (eine MetaMask-Bestätigung pro Haus). Die Chip-Schlüssel entstehen im Browser und liegen nur in diesem Browser.
+2. Pro Haus erscheint ein QR-Code. Handy (Chrome, NFC an): QR scannen → „Chip beschreiben“ → Sticker auflegen. Die App liest den Chip zur Kontrolle zurück.
+3. Am PC „✔ Chip beschrieben“ drücken (löscht den Schlüssel vom PC). „CSV exportieren“ sichert die URLs vorher (geheim, nicht committen).
+
+Ein-/Auslagern der Tiere und Pflege laufen in der Handy-App (Caretaker darf `interact`, `moveIn`, `moveOut`). **`PetHouse` hat sich geändert → Contracts neu deployen.**

@@ -11,6 +11,7 @@ import Arena from "./pages/Arena";
 import Galerie from "./pages/Galerie";
 import HousePage from "./pages/House";
 import NfcSetup from "./pages/NfcSetup";
+import Admin from "./pages/Admin";
 import PhonePage, { PhoneSigner } from "./pages/Phone";
 import { getPhonePair } from "./relay";
 import { hasWallet, isMobile, metamaskLink } from "./nfc";
@@ -131,6 +132,7 @@ export default function App() {
           <Route path="/pet/:id" element={<PetPage />} />
           <Route path="/house/:id" element={<HousePage />} />
           <Route path="/nfc" element={<NfcSetup />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/phone" element={<PhonePage />} />
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />

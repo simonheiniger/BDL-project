@@ -6,7 +6,7 @@ import { ACTIONS, useContracts } from "../contracts";
 import { config } from "../wagmi";
 import { friendlyError, loadHouse, loadPet, useChainQuery, useHouse, useMyPets, usePetHousing } from "../hooks";
 import { MoodBar, NftCard, short, tierInfo } from "../components/common";
-import { caretakerAddress, fingerprint, loadGrants, sendCare, type Grant } from "../caretaker";
+import { caretakerAddress, fingerprint, loadGrants, sendAsCaretaker, sendCare, type Grant } from "../caretaker";
 import { keyAddress, listScans, loadScan, saveScan, scanExpiry, signScanWithKey, useScan } from "../scan";
 import { clearPhonePair, isPairId, phoneRegister, setPhonePair, usePair } from "../relay";
 import { onOpenUrl } from "../native";
@@ -30,9 +30,37 @@ function CompanionPet({ petId, owner, houseScanTick }: { petId: bigint; owner: A
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
-  void houseScanTick;
+  // Gescannte Haeuser dieses Besitzers mit freiem Platz: dorthin darf das Pet einziehen
+  const { data: targets } = useChainQuery(
+    ["moveTargets", petId.toString(), houseScanTick, owner],
+    async (pc, c) => {
+      const out: { id: bigint; tier: number }[] = [];
+      for (const s of listScans(chainId)) {
+        const h = await loadHouse(pc, c, s.houseId);
+        if (h && h.owner.toLowerCase() === owner.toLowerCase() && h.occupants < tierInfo(h.tier).capacity) out.push({ id: h.id, tier: h.tier });
+      }
+      return out;
+    },
+  );
   if (!view || !c) return null;
   const housed = !!housing && housing.houseId > 0n;
+
+  async function move(label: string, functionName: "moveIn" | "moveOut", args: bigint[]) {
+    if (!c || !pc) return;
+    setErr(null);
+    setOk(null);
+    setBusy(label);
+    try {
+      const chain = config.chains.find((x) => x.id === chainId)!;
+      await sendAsCaretaker({ pc, chain, target: c.PetHouse, functionName, args });
+      await qc.invalidateQueries();
+      setOk(`${label} ✔`);
+    } catch (e) {
+      setErr(friendlyCaretakerError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function care(action: number, label: string) {
     if (!c || !pc || !housing || !scan) return;
@@ -86,6 +114,27 @@ function CompanionPet({ petId, owner, houseScanTick }: { petId: bigint; owner: A
               </button>
             ))}
           </div>
+        )}
+        <div className="row wrap">
+          {housed && (
+            <button className="btn small" disabled={!!busy} onClick={() => move("Ausziehen", "moveOut", [petId])}>
+              🚪 Ausziehen
+            </button>
+          )}
+          {!housed &&
+            targets?.map((t) => (
+              <button
+                key={t.id.toString()}
+                className="btn small"
+                disabled={!!busy}
+                onClick={() => move(`Einziehen in Haus #${t.id}`, "moveIn", [petId, t.id])}
+              >
+                🏠 Einziehen in {tierInfo(t.tier).name} #{t.id.toString()}
+              </button>
+            ))}
+        </div>
+        {!housed && targets?.length === 0 && (
+          <p className="small">📡 Zum Einziehen den NFC-Chip eines eigenen Hauses mit freiem Platz scannen.</p>
         )}
         {busy && <p className="small">⏳ {busy} …</p>}
         {ok && <p className="small">{ok}</p>}

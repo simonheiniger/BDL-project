@@ -49,8 +49,32 @@ export async function loadGrants(pc: PublicClient, c: Contracts, who: Address): 
   return grants;
 }
 
+/** Transaktion mit dem Caretaker-Schluessel senden (nur Funktionen, die der Contract Caretakern erlaubt) */
+export async function sendAsCaretaker(args: {
+  pc: PublicClient;
+  chain: Chain;
+  target: { address: Address; abi: Abi };
+  functionName: "interact" | "moveIn" | "moveOut";
+  args: readonly unknown[];
+}) {
+  const wallet = createWalletClient({
+    account: privateKeyToAccount(caretakerKey()),
+    chain: args.chain,
+    transport: http(args.chain.rpcUrls.default.http[0]),
+  });
+  const hash = await wallet.writeContract({
+    address: args.target.address,
+    abi: args.target.abi,
+    functionName: args.functionName,
+    args: args.args,
+  });
+  const rc = await args.pc.waitForTransactionReceipt({ hash });
+  if (rc.status !== "success") throw new Error("Transaktion revertiert");
+  return rc;
+}
+
 /** Pflege senden: signiert lokal mit dem Caretaker-Schluessel, Gas zahlt der Caretaker (vom PC beim Koppeln befuellt) */
-export async function sendCare(args: {
+export function sendCare(args: {
   pc: PublicClient;
   chain: Chain;
   pets: { address: Address; abi: Abi };
@@ -59,18 +83,11 @@ export async function sendCare(args: {
   expiry: bigint;
   signature: Hex;
 }) {
-  const wallet = createWalletClient({
-    account: privateKeyToAccount(caretakerKey()),
+  return sendAsCaretaker({
+    pc: args.pc,
     chain: args.chain,
-    transport: http(args.chain.rpcUrls.default.http[0]),
-  });
-  const hash = await wallet.writeContract({
-    address: args.pets.address,
-    abi: args.pets.abi,
+    target: args.pets,
     functionName: "interact",
     args: [args.petId, args.action, args.expiry, args.signature],
   });
-  const rc = await args.pc.waitForTransactionReceipt({ hash });
-  if (rc.status !== "success") throw new Error("Transaktion revertiert");
-  return rc;
 }
