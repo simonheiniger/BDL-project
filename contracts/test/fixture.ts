@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { time, mine } from "@nomicfoundation/hardhat-network-helpers";
-import type { PetNFT, Arena } from "../typechain-types";
+import type { PetNFT, Arena, PetHouse } from "../typechain-types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
 export const MINT_PRICE = ethers.parseEther("0.01");
@@ -31,6 +31,9 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
     checkin.address,
   ]);
   const market = await ethers.deployContract("Marketplace", [await pets.getAddress()]);
+  const houses = await ethers.deployContract("PetHouse");
+  await houses.setPets(await pets.getAddress());
+  await pets.setHouses(await houses.getAddress());
 
   await pets.setGameContracts(await cosmetics.getAddress(), await trophy.getAddress());
   await trophy.setRoles(await arena.getAddress(), await pets.getAddress());
@@ -38,19 +41,62 @@ export async function deployAll(cooldown = 0n, maxPerDay = 1000n) {
   await cosmetics.addItem("Sonnenbrille", ethers.parseEther("0.002"), 2);
   await cosmetics.addItem("Krone", ethers.parseEther("0.02"), 50);
 
-  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, renderer, pets, cosmetics, trophy, arena, market };
+  return { deployer, alice, bob, carol, host, checkin, registry, accountImpl, renderer, pets, cosmetics, trophy, arena, market, houses };
 }
 
-export async function mintPet(pets: PetNFT, who: HardhatEthersSigner) {
-  const tx = await pets.connect(who).mint({ value: MINT_PRICE });
+/** Schluessel des (simulierten) NFC-Chips eines Hauses: deterministisch aus der houseId, damit Tests zustandslos bleiben */
+export const tagWallet = (houseId: bigint) => new ethers.Wallet(ethers.id(`bdl-test-tag-${houseId}`));
+
+/** Haus mit Chip praegen (Owner = Deployer praegt, `to` bekommt es). tier 0..4 = Huette..Villa */
+export async function mintHouse(houses: PetHouse, to: string, tier = 4) {
+  const [deployer] = await ethers.getSigners();
+  const id = await houses.nextHouseId();
+  await houses.connect(deployer).mintHouse(to, tier, tagWallet(id).address);
+  return id;
+}
+
+/** Pet minten. Ohne `houseId` bekommt der Spieler ein neues Haus (Villa, 5 Plaetze). */
+export async function mintPet(pets: PetNFT, who: HardhatEthersSigner, houseId?: bigint) {
+  const houses = await ethers.getContractAt("PetHouse", await pets.houses());
+  houseId ??= await mintHouse(houses, who.address);
+  const tx = await pets.connect(who).mint(houseId, { value: MINT_PRICE });
   const rc = await tx.wait();
   const ev = rc!.logs.map((l) => pets.interface.parseLog(l)).find((e) => e?.name === "Minted")!;
-  return { id: ev.args.petId as bigint, account: ev.args.account as string };
+  return { id: ev.args.petId as bigint, account: ev.args.account as string, houseId };
 }
 
-/** n Interaktionen einer Aktion (0=Train/STR, 1=Play/AGI, 2=Puzzle/INT, 3=Feed/VIT) */
+/** NFC-Scan simulieren: Chip-Schluessel signiert Spieler/Pet/Haus/Nonce/Ablauf (EIP-712) */
+export async function signScan(houses: PetHouse, player: string, petId: bigint, expiryIn = 600) {
+  const houseId = await houses.houseOf(petId);
+  const nonce = (await houses.houses(houseId)).nonce;
+  const expiry = BigInt(await time.latest()) + BigInt(expiryIn);
+  const { chainId } = await ethers.provider.getNetwork();
+  const sig = await tagWallet(houseId).signTypedData(
+    { name: "BDL Pet House", version: "1", chainId, verifyingContract: await houses.getAddress() },
+    {
+      Scan: [
+        { name: "player", type: "address" },
+        { name: "petId", type: "uint256" },
+        { name: "houseId", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "expiry", type: "uint256" },
+      ],
+    },
+    { player, petId, houseId, nonce, expiry },
+  );
+  return { expiry, sig };
+}
+
+/** Einmal pflegen (inkl. Scan). 0=Train/STR, 1=Play/AGI, 2=Puzzle/INT, 3=Feed/VIT */
+export async function care(pets: PetNFT, who: HardhatEthersSigner, id: bigint, action = 3) {
+  const houses = await ethers.getContractAt("PetHouse", await pets.houses());
+  const { expiry, sig } = await signScan(houses, who.address, id);
+  return pets.connect(who).interact(id, action, expiry, sig);
+}
+
+/** n Pflegen mit Scan */
 export async function interactN(pets: PetNFT, who: HardhatEthersSigner, id: bigint, n: number, action = 3) {
-  for (let i = 0; i < n; i++) await pets.connect(who).interact(id, action);
+  for (let i = 0; i < n; i++) await (await care(pets, who, id, action)).wait();
 }
 
 /** EIP-712 Check-in-Signatur, wie sie der Check-in-Service ausstellt */

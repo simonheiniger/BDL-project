@@ -11,3 +11,5 @@ contracts/seeds/
 *.local
 session.txt
 contracts/art/out/
+hardware/out/
+app/tsconfig.tsbuildinfo

@@ -231,7 +231,15 @@ ein Operator Assets abziehen, ohne dass `state` steigt).
   kostet ein Join wenige Cent.
 - **Stufen:** Venue (Geohash 7, ~150 m) → Stadt (Geohash 5, ~5 km) → Saison-Finale (Trophäe als Zulassung).
 
-## 4. Physische Komponente
+## 4. Physische Komponente: Häuser
+
+- Pets leben in **Häusern** (`PetHouse`, ERC-721, 5 Stufen). Mint nur in einen freien Platz → die Pet-Zahl ist durch die real gedruckten Häuser begrenzt.
+- Zufriedenheit sinkt linear pro Tag (Hütte −40 … Villa −6), außerhalb eines Hauses ist sie eingefroren. Pflege +25; unter 50 gibt es nur 50–100 % XP. Kein Pay-to-Win: ein besseres Haus gibt nie mehr als 100 %.
+- **Scan-Pflicht:** Chip-Schlüssel signiert EIP-712 `Scan(player, petId, houseId, nonce, expiry)`; `PetNFT.interact` verlangt diese Signatur. Der Schlüssel liegt nur im URL-Fragment des Chips, die App hält ihn 15 min im sessionStorage.
+- Ehrlich: Eine kopierte Chip-URL funktioniert ebenfalls (NTAG213 ist kopierbar). Schutz: nur der Haus-Besitzer kann pflegen, `setTag` rotiert den Schlüssel. Next step: NTAG 424 DNA (SUN/CMAC).
+- Modelle: `hardware/` (OpenSCAD, 4 Farbslots, runde Ausnehmung 27 mm für den NFC-Sticker unten).
+
+### Alt: Physische Komponente (MVP)
 
 - NFC-Sticker im 3D-gedruckten Haus (`hardware/pet-house.scad`, parametrisch) enthält nur die URL `…/pet/<id>?nfc`.
   iOS und Android öffnen sie nativ, die App zeigt das Pet „aufgeweckt“ an.

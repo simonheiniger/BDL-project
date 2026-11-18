@@ -49,8 +49,11 @@ async function main() {
   const trophy = await deploy("Trophy");
   const arena = await deploy("Arena", [await pets.getAddress(), await trophy.getAddress(), checkinSigner]);
   const market = await deploy("Marketplace", [await pets.getAddress()]);
+  const houses = await deploy("PetHouse");
 
   await (await (pets as any).setGameContracts(await cosmetics.getAddress(), await trophy.getAddress())).wait();
+  await (await (houses as any).setPets(await pets.getAddress())).wait();
+  await (await (pets as any).setHouses(await houses.getAddress())).wait();
   await (await (pets as any).setRenderer(await renderer.getAddress())).wait();
   await (await (trophy as any).setRoles(await arena.getAddress(), await pets.getAddress())).wait();
 
@@ -75,6 +78,7 @@ async function main() {
     Trophy: await trophy.getAddress(),
     Arena: await arena.getAddress(),
     Marketplace: await market.getAddress(),
+    PetHouse: await houses.getAddress(),
   };
 
   // Adressen pro chainId sammeln (lokal + Kurs-Testnetz koennen parallel existieren)

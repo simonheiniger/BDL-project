@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { bdl } from "../wagmi";
 import { formatEther } from "viem";
+import { Link } from "react-router-dom";
 import { useContracts } from "../contracts";
-import { useChainQuery, useMyPets, useTx, loadPet } from "../hooks";
-import { NftCard, TxStatus } from "../components/common";
+import { useChainQuery, useMyHouses, useMyPets, useTx, loadPet } from "../hooks";
+import { NftCard, TxStatus, tierInfo } from "../components/common";
 
 /** Erste Schritte fuer neue Spieler: MetaMask, Netzwerk hinzufuegen, Test-ETH */
 function Onboarding() {
@@ -61,7 +62,11 @@ export default function Home() {
   const { data: price } = useChainQuery(["mintPrice"], (pc, c) =>
     pc.readContract({ ...c.PetNFT, functionName: "mintPrice" }) as Promise<bigint>,
   );
+  const { data: houses } = useMyHouses();
   const tx = useTx();
+  const [houseSel, setHouseSel] = useState("");
+  const freeHouses = (houses ?? []).filter((h) => h.occupants < tierInfo(h.tier).capacity);
+  const target = freeHouses.find((h) => h.id.toString() === houseSel) ?? freeHouses[0];
 
   if (!isConnected) {
     return (
@@ -79,22 +84,59 @@ export default function Home() {
 
   return (
     <>
-      <div className="row between">
+      <div className="row between wrap">
         <h2>Meine Pets</h2>
         {c && price !== undefined && (
-          <button
-            className="btn"
-            disabled={!!tx.pending}
-            onClick={() => tx.send("Pet wird geschlüpft", { ...c.PetNFT, functionName: "mint", value: price })}
-          >
-            🥚 Neues Pet ({formatEther(price)} ETH)
-          </button>
+          <div className="row wrap">
+            {freeHouses.length > 1 && (
+              <select value={target?.id.toString() ?? ""} onChange={(e) => setHouseSel(e.target.value)}>
+                {freeHouses.map((h) => (
+                  <option key={h.id.toString()} value={h.id.toString()}>
+                    {tierInfo(h.tier).emoji} {tierInfo(h.tier).name} #{h.id.toString()} ({tierInfo(h.tier).capacity - h.occupants} frei)
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              className="btn"
+              disabled={!!tx.pending || !target}
+              title={target ? "" : "Kein freier Platz – dafür brauchst du ein (weiteres) Haus"}
+              onClick={() => tx.send("Pet wird geschlüpft", { ...c.PetNFT, functionName: "mint", args: [target!.id], value: price })}
+            >
+              🥚 Neues Pet ({formatEther(price)} ETH)
+            </button>
+          </div>
         )}
       </div>
       <TxStatus {...tx} />
-      {views?.length === 0 && <p className="muted">Noch keine Pets. Schlüpfe dein erstes!</p>}
+      {houses && freeHouses.length === 0 && (
+        <p className="card warn">
+          🏚️ {houses.length === 0 ? "Du besitzt noch kein Haus." : "Alle deine Häuser sind voll."} Pets brauchen einen Platz in
+          einem physischen 3D-Haus mit NFC-Chip (Hütte bis Villa) – neue Pets gibt es nur mit freiem Platz.
+        </p>
+      )}
+      {views?.length === 0 && houses?.length !== 0 && <p className="muted">Noch keine Pets. Schlüpfe dein erstes!</p>}
       <div className="cards">
         {views?.map((v) => <NftCard key={v.id.toString()} view={v} />)}
+      </div>
+
+      <h2>Meine Häuser</h2>
+      {houses?.length === 0 && <p className="muted">Keine. Ein Haus (mit NFC-Chip) bekommst du bei einem Host oder per 3D-Druck.</p>}
+      <div className="cards">
+        {houses?.map((h) => {
+          const t = tierInfo(h.tier);
+          return (
+            <Link key={h.id.toString()} to={`/house/${h.id}`} className="card housecard">
+              <span className="houseicon">{t.emoji}</span>
+              <strong>
+                {t.name} #{h.id.toString()}
+              </strong>
+              <span className="muted small">
+                {h.occupants}/{t.capacity} Plätze · −{t.decay} Zufriedenheit/Tag
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </>
   );

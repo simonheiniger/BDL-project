@@ -5,6 +5,10 @@ import {
   deployAll,
   mintPet,
   interactN,
+  care,
+  signScan,
+  mintHouse,
+  tagWallet,
   signCheckIn,
   runTournament,
   commitOf,
@@ -86,7 +90,7 @@ describe("ERC-6551: Registry + PetAccount", () => {
 describe("PetNFT: Mint + Pflege-Loop", () => {
   it("Mint-Preis wird erzwungen, Start-Stats 5..15, Level 1", async () => {
     const { pets, alice } = await loadFixture(fast);
-    await expect(pets.connect(alice).mint({ value: 1n })).to.be.revertedWithCustomError(pets, "WrongPayment");
+    await expect(pets.connect(alice).mint(1n, { value: 1n })).to.be.revertedWithCustomError(pets, "WrongPayment");
     const { id } = await mintPet(pets, alice);
     const p = await pets.getPet(id);
     expect(p.level).to.equal(1n);
@@ -124,22 +128,22 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
   it("Nur Owner darf pflegen", async () => {
     const { pets, alice, bob } = await loadFixture(fast);
     const { id } = await mintPet(pets, alice);
-    await expect(pets.connect(bob).interact(id, 0)).to.be.revertedWithCustomError(pets, "NotPetOwner");
+    await expect(care(pets, bob, id, 0)).to.be.revertedWithCustomError(pets, "NotPetOwner");
   });
 
   it("Cooldown + Tageslimit (Produktions-Config 60s / 6 pro Tag)", async () => {
     const { pets, alice } = await loadFixture(prod);
     const { id } = await mintPet(pets, alice);
-    await pets.connect(alice).interact(id, 3);
-    await expect(pets.connect(alice).interact(id, 3)).to.be.revertedWithCustomError(pets, "Cooldown");
+    await care(pets, alice, id, 3);
+    await expect(care(pets, alice, id, 3)).to.be.revertedWithCustomError(pets, "Cooldown");
     for (let i = 0; i < 5; i++) {
       await time.increase(61);
-      await pets.connect(alice).interact(id, 3);
+      await care(pets, alice, id, 3);
     }
     await time.increase(61);
-    await expect(pets.connect(alice).interact(id, 3)).to.be.revertedWithCustomError(pets, "DailyLimit");
+    await expect(care(pets, alice, id, 3)).to.be.revertedWithCustomError(pets, "DailyLimit");
     await time.increase(86400);
-    await pets.connect(alice).interact(id, 3);
+    await care(pets, alice, id, 3);
   });
 
   it("tokenURI: gueltiges on-chain JSON mit Traits, Stufe Ei bei Lv 1", async () => {
@@ -476,5 +480,159 @@ describe("Marketplace", () => {
       market,
       "InventoryChanged",
     );
+  });
+});
+
+describe("PetHouse: NFC-Haus, Kapazitaet, Zufriedenheit", () => {
+  it("Mint nur mit eigenem Haus mit freiem Platz (Huette = 1 Platz)", async () => {
+    const { pets, houses, alice, bob } = await loadFixture(fast);
+    const hut = await mintHouse(houses, alice.address, 0);
+    await mintPet(pets, alice, hut);
+    await expect(pets.connect(alice).mint(hut, { value: ethers.parseEther("0.01") })).to.be.revertedWithCustomError(
+      houses,
+      "HouseFull",
+    );
+    // fremdes Haus
+    await expect(pets.connect(bob).mint(hut, { value: ethers.parseEther("0.01") })).to.be.revertedWithCustomError(
+      houses,
+      "NotHouseOwner",
+    );
+    // Stufe bestimmt die Plaetze: Villa = 5
+    const villa = await mintHouse(houses, alice.address, 4);
+    for (let i = 0; i < 5; i++) await mintPet(pets, alice, villa);
+    await expect(pets.connect(alice).mint(villa, { value: ethers.parseEther("0.01") })).to.be.revertedWithCustomError(
+      houses,
+      "HouseFull",
+    );
+    expect((await houses.houses(villa)).occupants).to.equal(5n);
+  });
+
+  it("Pflegen ohne gueltigen Scan scheitert (falscher Schluessel, abgelaufen, Replay, fremder Spieler)", async () => {
+    const { pets, houses, alice, bob } = await loadFixture(fast);
+    const { id } = await mintPet(pets, alice);
+
+    // Signatur mit falschem Schluessel (z.B. kopierte/erfundene URL)
+    const bad = await signScan(houses, alice.address, id);
+    const forged = ethers.hexlify(ethers.randomBytes(65));
+    await expect(pets.connect(alice).interact(id, 3, bad.expiry, forged)).to.be.reverted;
+
+    // abgelaufen
+    const old = await signScan(houses, alice.address, id, 10);
+    await time.increase(60);
+    await expect(pets.connect(alice).interact(id, 3, old.expiry, old.sig)).to.be.revertedWithCustomError(
+      houses,
+      "ScanExpired",
+    );
+
+    // Replay: gleiche Signatur nur einmal
+    const ok = await signScan(houses, alice.address, id);
+    await pets.connect(alice).interact(id, 3, ok.expiry, ok.sig);
+    await expect(pets.connect(alice).interact(id, 3, ok.expiry, ok.sig)).to.be.revertedWithCustomError(
+      houses,
+      "BadScan",
+    );
+
+    // Signatur an Spieler gebunden: Bob kann Alices Scan nicht benutzen
+    const forAlice = await signScan(houses, alice.address, id);
+    await expect(pets.connect(bob).interact(id, 3, forAlice.expiry, forAlice.sig)).to.be.revertedWithCustomError(
+      pets,
+      "NotPetOwner",
+    );
+  });
+
+  it("Nicht untergebrachtes Pet laesst sich nicht pflegen (Auszug), nach Einzug wieder", async () => {
+    const { pets, houses, alice } = await loadFixture(fast);
+    const { id, houseId } = await mintPet(pets, alice);
+    await houses.connect(alice).moveOut(id);
+    expect(await houses.houseOf(id)).to.equal(0n);
+    await expect(care(pets, alice, id)).to.be.revertedWithCustomError(houses, "NotHoused");
+    await houses.connect(alice).moveIn(id, houseId);
+    await care(pets, alice, id);
+    expect((await pets.getPet(id)).xp).to.equal(20n);
+  });
+
+  it("Zufriedenheit sinkt je nach Stufe: Huette schnell, Villa langsam", async () => {
+    const { pets, houses, alice } = await loadFixture(fast);
+    const hut = await mintPet(pets, alice, await mintHouse(houses, alice.address, 0));
+    const villa = await mintPet(pets, alice, await mintHouse(houses, alice.address, 4));
+    expect(await houses.moodOf(hut.id)).to.equal(100n);
+    await time.increase(86400); // 1 Tag
+    const mh = await houses.moodOf(hut.id);
+    const mv = await houses.moodOf(villa.id);
+    expect(mh).to.be.closeTo(60n, 1n); // -40/Tag
+    expect(mv).to.be.closeTo(94n, 1n); // -6/Tag
+    await time.increase(3 * 86400);
+    expect(await houses.moodOf(hut.id)).to.equal(0n);
+    expect(await houses.moodOf(villa.id)).to.be.closeTo(76n, 1n); // 4 Tage * 6
+  });
+
+  it("Vernachlaessigtes Pet bekommt weniger XP, Pflege hebt die Zufriedenheit; Haus gibt nie > 100 %", async () => {
+    const { pets, houses, alice } = await loadFixture(fast);
+    const { id } = await mintPet(pets, alice, await mintHouse(houses, alice.address, 0));
+    await care(pets, alice, id); // Mood 100 -> volle 20 XP
+    expect((await pets.getPet(id)).xp).to.equal(20n);
+    await time.increase(3 * 86400); // Mood 0
+    await care(pets, alice, id); // 50 % -> +10
+    expect((await pets.getPet(id)).xp).to.equal(30n);
+    expect(await houses.moodOf(id)).to.be.closeTo(25n, 1n); // +25 pro Pflege
+  });
+
+  it("Auszug friert die Zufriedenheit ein", async () => {
+    const { pets, houses, alice } = await loadFixture(fast);
+    const { id, houseId } = await mintPet(pets, alice, await mintHouse(houses, alice.address, 0));
+    await time.increase(43200); // 12 h -> ~80
+    await houses.connect(alice).moveOut(id);
+    const frozen = await houses.moodOf(id);
+    expect(frozen).to.be.closeTo(80n, 2n);
+    await time.increase(5 * 86400);
+    expect(await houses.moodOf(id)).to.equal(frozen);
+    await houses.connect(alice).moveIn(id, houseId);
+    expect(await houses.moodOf(id)).to.be.closeTo(frozen, 1n);
+  });
+
+  it("Verkauf des Pets raeumt den Platz; Kaeufer braucht ein eigenes Haus", async () => {
+    const { pets, houses, alice, bob } = await loadFixture(fast);
+    const hut = await mintHouse(houses, alice.address, 0);
+    const { id } = await mintPet(pets, alice, hut);
+    await pets.connect(alice).transferFrom(alice.address, bob.address, id);
+    expect((await houses.houses(hut)).occupants).to.equal(0n);
+    expect(await houses.houseOf(id)).to.equal(0n);
+    await expect(care(pets, bob, id)).to.be.revertedWithCustomError(houses, "NotHoused");
+    await expect(houses.connect(bob).moveIn(id, hut)).to.be.revertedWithCustomError(houses, "NotHouseOwner");
+    const bobHouse = await mintHouse(houses, bob.address, 1);
+    await houses.connect(bob).moveIn(id, bobHouse);
+    await care(pets, bob, id);
+  });
+
+  it("Haus nur uebertragbar wenn leer; neuer Besitzer kann Chip neu programmieren", async () => {
+    const { pets, houses, alice, bob } = await loadFixture(fast);
+    const hut = await mintHouse(houses, alice.address, 0);
+    const { id } = await mintPet(pets, alice, hut);
+    await expect(houses.connect(alice).transferFrom(alice.address, bob.address, hut)).to.be.revertedWithCustomError(
+      houses,
+      "HouseNotEmpty",
+    );
+    await houses.connect(alice).moveOut(id);
+    await houses.connect(alice).transferFrom(alice.address, bob.address, hut);
+    await expect(houses.connect(alice).setTag(hut, alice.address)).to.be.revertedWithCustomError(houses, "NotHouseOwner");
+    // alter Schluessel gilt weiter, bis der neue Besitzer ihn tauscht
+    const fresh = ethers.Wallet.createRandom();
+    await houses.connect(bob).setTag(hut, fresh.address);
+    await expect(houses.connect(bob).moveIn(id, hut)).to.be.revertedWithCustomError(houses, "NotPetOwner");
+    expect((await houses.houses(hut)).tag).to.equal(fresh.address);
+    expect(tagWallet(hut).address).to.not.equal(fresh.address);
+  });
+
+  it("Fusion gibt den Platz des verbrannten Pets frei", async () => {
+    const { pets, houses, alice } = await loadFixture(fast);
+    const house = await mintHouse(houses, alice.address, 1); // 2 Plaetze
+    const a = await mintPet(pets, alice, house);
+    const b = await mintPet(pets, alice, house);
+    await interactN(pets, alice, a.id, 43);
+    await interactN(pets, alice, b.id, 43);
+    expect((await houses.houses(house)).occupants).to.equal(2n);
+    await pets.connect(alice).fuse(a.id, b.id);
+    expect((await houses.houses(house)).occupants).to.equal(1n);
+    await mintPet(pets, alice, house); // Platz wieder frei
   });
 });

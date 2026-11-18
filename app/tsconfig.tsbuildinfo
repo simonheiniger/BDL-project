@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/contracts.ts","./src/gamemath.ts","./src/hooks.ts","./src/main.tsx","./src/vite-env.d.ts","./src/wagmi.ts","./src/components/common.tsx","./src/pages/Arena.tsx","./src/pages/Fusion.tsx","./src/pages/Galerie.tsx","./src/pages/Home.tsx","./src/pages/Market.tsx","./src/pages/PetPage.tsx"],"version":"5.6.3"}

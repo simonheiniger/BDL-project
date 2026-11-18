@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
-import { STAT_NAMES, type Pet } from "../contracts";
+import { HOUSE_TIERS, STAT_NAMES, type Pet } from "../contracts";
 import { xpToNext, MAX_LEVEL } from "../gamemath";
 import type { PetView } from "../hooks";
 
@@ -134,3 +134,19 @@ export function TxStatus({ pending, error }: { pending: string | null; error: st
 }
 
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+/** Zufriedenheit 0..100 (unter 50 gibt es nur noch 50-100 % XP) */
+export function MoodBar({ mood }: { mood: number }) {
+  const face = mood >= 75 ? "😊" : mood >= 50 ? "🙂" : mood >= 25 ? "😕" : "😢";
+  return (
+    <div className="stat" title="Unter 50 Zufriedenheit gibt Pflege weniger XP. Bessere Häuser halten länger zufrieden.">
+      <span className="label">{face}</span>
+      <div className={`bar mood ${mood < 50 ? "low" : ""}`}>
+        <div style={{ width: `${mood}%` }} />
+      </div>
+      <span className="val">{mood}</span>
+    </div>
+  );
+}
+
+export const tierInfo = (tier: number) => HOUSE_TIERS[Math.min(tier, HOUSE_TIERS.length - 1)];
