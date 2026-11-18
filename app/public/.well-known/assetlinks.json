@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ch.zhaw.bdl.pets",
+      "sha256_cert_fingerprints": [
+        "1A:BC:F7:29:F1:BC:A1:E1:C8:AE:3D:2E:79:6C:71:F6:53:33:65:05:BD:80:4B:7F:B3:71:C9:62:FF:48:2B:4C"
+      ]
+    }
+  }
+]

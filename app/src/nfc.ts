@@ -66,3 +66,24 @@ export const hasWallet = () => !!(window as unknown as { ethereum?: unknown }).e
 
 /** Oeffnet die aktuelle Seite (inkl. #k=) im MetaMask-In-App-Browser */
 export const metamaskLink = (url = location.href) => `https://metamask.app.link/dapp/${url.replace(/^https?:\/\//, "")}`;
+
+/**
+ * Schreib-Link fuer den Entwickler-Ablauf: Der PC praegt das Haus und zeigt einen QR-Code mit
+ * <origin>/nfc#w=<base64url(Chip-URL)>. Das Handy (Chrome) oeffnet ihn und schreibt die URL auf den Chip.
+ * Der Chip-Schluessel steht nur im Fragment (geht nie an einen Server).
+ */
+export const writeLink = (url: string, origin = location.origin) =>
+  `${origin}/nfc#w=${btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+
+/** Chip-URL aus "#w=..." lesen. Nur URLs dieser Seite (<origin>/house/<id>#k=<64 hex>) werden akzeptiert. */
+export function parseWriteLink(hash: string, origin = location.origin): { url: string; houseId: string } | null {
+  const m = /^#?w=([A-Za-z0-9_-]+)$/.exec(hash);
+  if (!m) return null;
+  try {
+    const url = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const p = new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/house/([1-9]\\d{0,9})#k=[0-9a-f]{64}$`).exec(url);
+    return p ? { url, houseId: p[1] } : null;
+  } catch {
+    return null;
+  }
+}

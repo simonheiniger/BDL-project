@@ -12,9 +12,13 @@ import Galerie from "./pages/Galerie";
 import Spiele from "./pages/Spiele";
 import HousePage from "./pages/House";
 import NfcSetup from "./pages/NfcSetup";
+import Admin from "./pages/Admin";
 import PhonePage, { PhoneSigner } from "./pages/Phone";
 import { getPhonePair } from "./relay";
 import { hasWallet, isMobile, metamaskLink } from "./nfc";
+import Companion from "./companion/Companion";
+import { isNative } from "./native";
+import { AppGate } from "./components/AppGate";
 
 function Wallet() {
   const { address, isConnected } = useAccount();
@@ -102,7 +106,9 @@ function ChainGuard() {
 }
 
 export default function App() {
+  if (isNative) return <Companion />;
   return (
+    <AppGate>
     <div className="app">
       <header>
         <NavLink to="/" className="logo">
@@ -128,6 +134,7 @@ export default function App() {
           <Route path="/pet/:id" element={<PetPage />} />
           <Route path="/house/:id" element={<HousePage />} />
           <Route path="/nfc" element={<NfcSetup />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/phone" element={<PhonePage />} />
           <Route path="/fusion" element={<Fusion />} />
           <Route path="/market" element={<Market />} />
@@ -137,5 +144,6 @@ export default function App() {
         </Routes>
       </main>
     </div>
+    </AppGate>
   );
 }

@@ -26,6 +26,8 @@ export default defineConfig({
     devRelay,
     VitePWA({
       registerType: "autoUpdate",
+      // APK-Download, API und Digital-Asset-Links duerfen nicht vom SPA-Fallback (index.html) ersetzt werden
+      workbox: { navigateFallbackDenylist: [/^\/api\//, /\.apk$/, /^\/\.well-known\//] },
       manifest: {
         name: "BDL Pets",
         short_name: "BDL Pets",

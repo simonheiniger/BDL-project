@@ -1,6 +1,7 @@
 import { http, createConfig } from "wagmi";
 import { injected, mock } from "wagmi/connectors";
 import { defineChain } from "viem";
+import { API_BASE } from "./native";
 
 // Lokaler Hardhat-Node. Hostname der Seite statt 127.0.0.1 -> funktioniert auch vom Handy im selben WLAN
 // (Node dann mit `npx hardhat node --hostname 0.0.0.0` starten).
@@ -21,6 +22,10 @@ export const bdl = defineChain({
   rpcUrls: { default: { http: [import.meta.env.VITE_BDL_RPC_URL ?? "http://127.0.0.1:8545"] } },
   testnet: true,
 });
+
+// Relativer Proxy-Pfad (/api/rpc) braucht in der Handy-App die absolute Basis-URL
+const readRpcRaw = import.meta.env.VITE_BDL_READ_RPC as string | undefined;
+const readRpc = readRpcRaw ? (readRpcRaw.startsWith("/") ? `${API_BASE}${readRpcRaw}` : readRpcRaw) : undefined;
 
 const defaultChain = import.meta.env.VITE_DEFAULT_CHAIN === "24888" ? bdl : local;
 
@@ -61,7 +66,7 @@ export const config = createConfig({
     mock({ accounts: [demoAccounts[demoIndex]], features: { reconnect: true, defaultConnected: storage.get() } }),
   ],
   // Lesen ueber VITE_BDL_READ_RPC (auf Vercel: https-Proxy /api/rpc), sonst direkt ueber die Chain-RPC
-  transports: { [local.id]: http(), [bdl.id]: http(import.meta.env.VITE_BDL_READ_RPC || undefined) },
+  transports: { [local.id]: http(), [bdl.id]: http(readRpc) },
 });
 
 declare module "wagmi" {

@@ -12,6 +12,7 @@ const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TO
 
 const REQ_TTL = 300; // s
 const PRESENCE_TTL = 12; // s
+const REGISTER_TTL = 3600; // s
 const MAX_QUEUE = 20;
 const MAX_FIELD = 2048;
 
@@ -65,14 +66,32 @@ async function run(cmds: Cmd[]): Promise<unknown[]> {
 }
 
 // ---- Handler ----------------------------------------------------------------------------------------------------
+// Handy-App (Capacitor, Android) hat die Origin https://localhost; normale Aufrufe sind same-origin
+const CORS = {
+  "access-control-allow-origin": "https://localhost",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
+  });
+
+/** Health-Check: zeigt, ob der Redis-Store konfiguriert ist (ohne Redis ist der Relay auf Vercel unzuverlaessig) */
+export function GET(): Response {
+  return json({ store: URL_ && TOKEN ? "redis" : "memory" });
+}
+
+export function OPTIONS(): Response {
+  return new Response(null, { status: 204, headers: CORS });
+}
 
 const isPair = (s: unknown): s is string => typeof s === "string" && /^[0-9a-f]{32}$/.test(s);
 const isId = (s: unknown): s is string => typeof s === "string" && /^[0-9a-f]{8,32}$/.test(s);
 const isText = (s: unknown): s is string => typeof s === "string" && s.length > 0 && s.length <= MAX_FIELD;
 
-type Body = { a?: string; pair?: unknown; id?: unknown; payload?: unknown; sig?: unknown; expiry?: unknown; houses?: unknown };
+type Body = { a?: string; pair?: unknown; id?: unknown; payload?: unknown; sig?: unknown; expiry?: unknown; houses?: unknown; address?: unknown };
 
 export async function POST(request: Request): Promise<Response> {
   const text = await request.text();
@@ -86,6 +105,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!isPair(b.pair)) return json({ error: "bad pair" }, 400);
   const q = `bdl:q:${b.pair}`; // Anfragen PC -> Handy (Liste)
   const p = `bdl:p:${b.pair}`; // Handy online + freigeschaltete Haeuser
+  const a = `bdl:a:${b.pair}`; // Adresse des Caretaker-Schluessels der Handy-App
 
   try {
     switch (b.a) {
@@ -115,9 +135,19 @@ export async function POST(request: Request): Promise<Response> {
         await run([["SET", p, JSON.stringify({ houses }), "EX", PRESENCE_TTL]]);
         return json({ ok: true });
       }
+      case "register": {
+        // Handy-App meldet die Adresse ihres Caretaker-Schluessels. Erste Adresse gewinnt (ein Foto vom QR-Code
+        // soll sie nicht ueberschreiben koennen); der PC zeigt sie zur Kontrolle an.
+        const addr = typeof b.address === "string" && /^0x[0-9a-fA-F]{40}$/.test(b.address) ? b.address.toLowerCase() : null;
+        if (!addr) return json({ error: "bad address" }, 400);
+        const [cur] = await run([["GET", a]]);
+        if (cur && cur !== addr) return json({ error: "already registered" }, 409);
+        await run([["SET", a, addr, "EX", REGISTER_TTL]]);
+        return json({ ok: true });
+      }
       case "status": {
-        const [v] = await run([["GET", p]]);
-        return json(v ? { online: true, ...JSON.parse(String(v)) } : { online: false, houses: [] });
+        const [v, caretaker] = await run([["GET", p], ["GET", a]]);
+        return json({ ...(v ? { online: true, ...JSON.parse(String(v)) } : { online: false, houses: [] }), caretaker: caretaker ?? null });
       }
       default:
         return json({ error: "unknown action" }, 400);

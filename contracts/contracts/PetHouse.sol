@@ -10,6 +10,8 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 
 interface IPetOwner {
     function ownerOf(uint256 petId) external view returns (address);
+
+    function isCaretaker(address owner_, address who) external view returns (bool);
 }
 
 /// @title PetHouse – physisches 3D-Haus mit NFC-Chip als ERC-721
@@ -115,9 +117,15 @@ contract PetHouse is ERC721, EIP712, Ownable {
 
     // ------------------------------------------------------------------ Einziehen / Ausziehen
 
+    /// @dev Aufrufer: Besitzer des Pets oder dessen Caretaker (Handy-App). Pet und Haus muessen demselben Besitzer gehoeren.
+    function _petOwnerFor(uint256 petId) internal view returns (address petOwner) {
+        petOwner = IPetOwner(pets).ownerOf(petId);
+        if (petOwner != msg.sender && !IPetOwner(pets).isCaretaker(petOwner, msg.sender)) revert NotPetOwner();
+    }
+
     function moveIn(uint256 petId, uint256 houseId) external {
-        if (IPetOwner(pets).ownerOf(petId) != msg.sender) revert NotPetOwner();
-        if (ownerOf(houseId) != msg.sender) revert NotHouseOwner();
+        address petOwner = _petOwnerFor(petId);
+        if (ownerOf(houseId) != petOwner) revert NotHouseOwner();
         _leave(petId);
         _enter(petId, houseId);
         // Zufriedenheit blieb waehrend der Zeit ausserhalb eingefroren: Zeitstempel neu starten
@@ -125,7 +133,7 @@ contract PetHouse is ERC721, EIP712, Ownable {
     }
 
     function moveOut(uint256 petId) external {
-        if (IPetOwner(pets).ownerOf(petId) != msg.sender) revert NotPetOwner();
+        _petOwnerFor(petId);
         if (houseOf[petId] == 0) revert NotHoused();
         _leave(petId);
     }

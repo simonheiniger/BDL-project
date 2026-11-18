@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Chip, chipUrl, newChip, nfcSupported, readChip, writeChip, metamaskLink, hasWallet } from "../nfc";
+import { Chip, chipUrl, newChip, nfcSupported, parseWriteLink, readChip, writeChip, metamaskLink, hasWallet } from "../nfc";
 
 /**
  * NFC-Chip initialisieren – ohne Wallet nutzbar (laeuft in Chrome auf Android).
@@ -14,7 +14,35 @@ export default function NfcSetup() {
   const [status, setStatus] = useState<{ kind: "ok" | "err" | "busy"; text: string } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const supported = nfcSupported();
+  // Entwickler-Ablauf: Chip-URL kommt fertig aus dem Admin-Tool (QR-Code), das Haus ist on-chain schon gepraegt
+  const [job, setJob] = useState<{ url: string; houseId: string } | null>(null);
+  useEffect(() => {
+    const w = parseWriteLink(location.hash);
+    if (w) {
+      setJob(w);
+      history.replaceState(null, "", location.pathname);
+    }
+  }, []);
   const idOk = /^[1-9]\d{0,9}$/.test(houseId);
+
+  async function writeJob() {
+    if (!job) return;
+    abort.current?.abort();
+    const ctl = (abort.current = new AbortController());
+    setStatus({ kind: "busy", text: "Chip an die Rückseite des Handys halten …" });
+    try {
+      await writeChip(job.url, { lock, signal: ctl.signal });
+      setStatus({ kind: "busy", text: "Geschrieben. Zur Kontrolle Chip noch einmal auflegen …" });
+      const back = await readChip(ctl.signal);
+      if (back !== job.url) throw new Error("Kontrolle fehlgeschlagen: Chip enthält nicht die erwartete URL.");
+      setStatus({ kind: "ok", text: `✅ Chip für Haus #${job.houseId} geschrieben und geprüft. Jetzt am PC „erledigt“ markieren.` });
+    } catch (e) {
+      const err = e as Error;
+      setStatus({ kind: "err", text: err.name === "AbortError" ? "Abgebrochen." : `⚠️ ${err.message}` });
+    } finally {
+      ctl.abort();
+    }
+  }
 
   async function program() {
     abort.current?.abort();
@@ -44,6 +72,34 @@ export default function NfcSetup() {
   }
 
   const setTagLink = chip ? `${location.origin}/house/${houseId}?settag=${chip.address}` : "";
+
+  if (job) {
+    return (
+      <>
+        <h2>Chip für Haus #{job.houseId} beschreiben</h2>
+        <section className="card">
+          {!supported && (
+            <p className="warn card">⚠️ Dieser Browser kann keine NFC-Chips beschreiben. Chrome auf Android mit NFC verwenden.</p>
+          )}
+          <p className="small">Leeren Sticker (NTAG213/215/216) bereithalten, dann „Chip beschreiben“ und den Sticker an die Handy-Rückseite halten.</p>
+          <label className="row small">
+            <input type="checkbox" checked={lock} onChange={(e) => setLock(e.target.checked)} /> Chip danach sperren (nicht mehr überschreibbar)
+          </label>
+          <div className="row">
+            <button className="btn" disabled={!supported || status?.kind === "busy"} onClick={writeJob}>
+              📡 Chip beschreiben
+            </button>
+            {status?.kind === "busy" && (
+              <button className="btn small" onClick={() => abort.current?.abort()}>
+                Abbrechen
+              </button>
+            )}
+          </div>
+          {status && <p className={status.kind === "err" ? "badge" : "badge nfc"}>{status.text}</p>}
+        </section>
+      </>
+    );
+  }
 
   return (
     <>

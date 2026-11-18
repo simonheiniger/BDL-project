@@ -27,8 +27,9 @@ const read = <T>(pc: PublicClient, address: Address, abi: Abi, functionName: str
   pc.readContract({ address, abi, functionName, args }) as Promise<T>;
 
 /** Eigene Pets ueber Transfer-Events finden (PetNFT ist bewusst nicht ERC721Enumerable -> billigere Transfers) */
-export function useMyPets() {
-  const { address } = useAccount();
+export function useMyPets(owner?: Address) {
+  const { address: me } = useAccount();
+  const address = owner ?? me;
   return useChainQuery(
     ["myPets", address],
     async (pc, c) => {
@@ -249,7 +250,7 @@ export function useInventory(account: Address | undefined) {
 }
 
 /** Bekannte Wallet-Probleme in verstaendliche Anleitungen uebersetzen */
-function friendlyError(e: unknown): string {
+export function friendlyError(e: unknown): string {
   const raw = e instanceof BaseError ? `${e.shortMessage} ${e.details ?? ""}` : (e as Error).message;
   if (/nonce too high/i.test(raw)) {
     return (

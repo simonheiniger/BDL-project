@@ -4,6 +4,7 @@ import { useAccount, useChainId } from "wagmi";
 import { formatEther, parseEther, type Address } from "viem";
 import { ACTIONS, ITEM_EMOJI, STAT_NAMES, ZERO, accountAbi, useContracts, zoneString } from "../contracts";
 import { useCare, useChainQuery, useHouse, useInventory, usePet, usePetHousing, useShopItems, useTx } from "../hooks";
+import { usePhoneStatus } from "../relay";
 import { useScan } from "../scan";
 import { MoodBar, NftCard, StatBars, Traits, TxStatus, XpBar, short, tierInfo } from "../components/common";
 
@@ -22,6 +23,9 @@ export default function PetPage() {
   const { data: housing } = usePetHousing(id);
   const { data: house } = useHouse(housing && housing.houseId > 0n ? housing.houseId : undefined);
   const scan = useScan(chainId, housing?.houseId);
+  const phone = usePhoneStatus();
+  // Scan lokal (dieses Geraet) oder ueber das gekoppelte Handy (signiert Anfragen des PCs)
+  const canCare = !!scan || (phone.online && !!housing && phone.houses.includes(Number(housing.houseId)));
   const [awake, setAwake] = useState(search.has("nfc"));
   const [price, setPrice] = useState("0.05");
 
@@ -109,7 +113,7 @@ export default function PetPage() {
               einziehen (Hausseite) – Pets leben in physischen NFC-Häusern.
             </p>
           )}
-          {housing && housing.houseId > 0n && !scan && (
+          {housing && housing.houseId > 0n && !canCare && (
             <p className="warn-text">
               📡 <strong>Scanne den NFC-Chip von Haus #{housing.houseId.toString()}</strong> mit dem Handy, um dieses Pet zu
               pflegen. Der Scan gilt 15 Minuten.
@@ -125,7 +129,7 @@ export default function PetPage() {
               <button
                 key={a.label}
                 className="btn"
-                disabled={!!tx.pending || !scan || !housing || housing.houseId === 0n}
+                disabled={!!tx.pending || !canCare || !housing || housing.houseId === 0n}
                 onClick={async () => {
                   setAwake(true);
                   await care(id!, housing!.houseId, i, a.label);
