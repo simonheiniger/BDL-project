@@ -28,8 +28,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="bdl-pets.vercel.app" android:pathPrefix="/house/" />
-                <data android:scheme="https" android:host="bdl-pets.vercel.app" android:path="/phone" />
+                <data android:scheme="https" android:host="bdl-project.vercel.app" android:pathPrefix="/house/" />
+                <data android:scheme="https" android:host="bdl-project.vercel.app" android:path="/phone" />
             </intent-filter>
             <!-- /bdl-applink -->
         </activity>

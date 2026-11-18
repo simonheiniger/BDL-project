@@ -248,7 +248,8 @@ export default function Companion() {
   }, []);
 
   const scans = listScans(chainId);
-  const lowGas = bal !== undefined && bal.value < 100_000_000_000_000n; // < 0.0001 ETH
+  // Gas-Warnung nur nach der Freigabe (vorher hat das Handy bewusst noch kein Guthaben)
+  const lowGas = !!grants?.length && bal !== undefined && bal.value < 100_000_000_000_000n; // < 0.0001 ETH
 
   return (
     <div className="app">
