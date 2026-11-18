@@ -230,12 +230,16 @@ export default function Companion() {
       const houseId = BigInt(h[1]);
       const key = `0x${k[1]}` as const;
       const house = await loadHouse(pc, c, houseId);
-      if (house && keyAddress(key).toLowerCase() === house.tag.toLowerCase()) {
+      if (!house) {
+        setMsg(`⚠️ Haus #${houseId} gibt es auf diesem Netz (Chain ${chainId}) nicht. Chip stammt von einem anderen Netz oder einer älteren Version.`);
+      } else if (keyAddress(key).toLowerCase() === house.tag.toLowerCase()) {
         saveScan(chainId, houseId, key);
         setScanTick((n) => n + 1);
         setMsg(`📡 Haus #${houseId} gescannt – Pflege 15 Minuten freigeschaltet.`);
       } else {
-        setMsg("⚠️ Dieser Chip passt nicht zum Haus (neu programmiert oder falsche URL).");
+        setMsg(
+          `⚠️ Chip passt nicht zu Haus #${houseId}: Der Schlüssel auf dem Chip (${short(keyAddress(key))}) ist nicht der im Haus eingetragene (${short(house.tag)}). Der Chip muss mit der URL des Hausprägers beschrieben sein oder das Haus braucht „Chip übernehmen“.`,
+        );
       }
     });
     // register/pc/c sind stabil genug: Listener nur bei Chain-/Contract-Wechsel neu

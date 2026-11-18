@@ -89,7 +89,9 @@ export default function HousePage() {
       saveScan(chainId, id, key);
       setScanMsg("📡 Chip gescannt – Pflege 15 Minuten freigeschaltet.");
     } else {
-      setScanMsg("⚠️ Dieser Chip passt nicht zum Haus (Chip wurde neu programmiert oder URL ist falsch).");
+      setScanMsg(
+        `⚠️ Chip passt nicht zu Haus #${id}: Schlüssel auf dem Chip (${short(keyAddress(key))}) ≠ im Haus eingetragen (${short(house.tag)}). Der Besitzer muss den Chip über „Chip übernehmen“ eintragen oder die richtige URL schreiben.`,
+      );
     }
     // Ohne Wallet (normaler Handy-Browser) Fragment behalten: der "In MetaMask öffnen"-Link braucht es
     if (hasWallet() || getPhonePair()) history.replaceState(null, "", location.pathname + location.search);
