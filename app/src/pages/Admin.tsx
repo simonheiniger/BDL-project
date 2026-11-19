@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { useAccount, useChainId, usePublicClient } from "wagmi";
 import type { Address, Hex } from "viem";
-import { isAddress } from "viem";
+import { isAddress, parseEventLogs } from "viem";
 import { HOUSE_TIERS, useContracts } from "../contracts";
 import { loadHouse, useChainQuery, useTx } from "../hooks";
 import { TxStatus, short, tierInfo } from "../components/common";
@@ -145,6 +145,16 @@ export default function Admin() {
             setPending(list);
           }
           break;
+        }
+        // Tatsaechlich geprägte ID aus dem Event nehmen (nextHouseId kann sich zwischen Lesen und Tx geaendert haben)
+        const minted = parseEventLogs({ abi: c.PetHouse.abi, eventName: "HouseMinted", logs: rc.logs }).find(
+          (l) => (l.args as { tag?: string }).tag?.toLowerCase() === chip.address.toLowerCase(),
+        );
+        const realId = (minted?.args as { houseId?: bigint } | undefined)?.houseId;
+        if (realId !== undefined && realId.toString() !== entry.houseId) {
+          list = list.map((p) => (p === entry ? { ...p, houseId: realId.toString() } : p));
+          save(list);
+          setPending(list);
         }
       }
     } finally {
