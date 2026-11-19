@@ -43,13 +43,32 @@ export default function PetPage() {
     },
     id !== undefined,
   );
-  const { data: timing } = useChainQuery(["timing"], async (pc, c) => {
-    const [cooldown, maxPerDay] = await Promise.all([
-      pc.readContract({ ...c.PetNFT, functionName: "cooldown" }) as Promise<bigint>,
-      pc.readContract({ ...c.PetNFT, functionName: "maxActionsPerDay" }) as Promise<bigint>,
-    ]);
-    return { cooldown: Number(cooldown), maxPerDay: Number(maxPerDay) };
-  });
+  const { data: care_ } = useChainQuery(
+    ["careInfo", id?.toString(), address],
+    async (pc, c) => {
+      const rd = <T,>(functionName: string, args: unknown[] = []) => pc.readContract({ ...c.PetNFT, functionName, args } as never) as Promise<T>;
+      const [fee, productPrice, maxPerDay, done, products] = await Promise.all([
+        rd<bigint>("careFee"),
+        rd<bigint>("productPrice"),
+        rd<bigint>("maxActionsPerDay"),
+        rd<readonly number[]>("doneToday", [id]),
+        address ? rd<bigint>("careProducts", [address]) : Promise.resolve(0n),
+      ]);
+      return { fee, productPrice, maxPerDay: Number(maxPerDay), done: done.map(Number), products };
+    },
+    id !== undefined,
+  );
+  // Cooldown laeuft clientseitig mit (Contract: 5 s bei Lv1 bis cooldown bei Lv50)
+  const { data: cd } = useChainQuery(["cdLevel", view?.pet.level?.toString()], async (pc, c) =>
+    Number((await pc.readContract({ ...c.PetNFT, functionName: "cooldownFor", args: [view!.pet.level] })) as bigint),
+    !!view,
+  );
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const cdLeft = view && cd !== undefined ? Math.max(0, Number(view.pet.lastAction) + cd - Math.floor(now / 1000)) : 0;
 
   if (isLoading) return <p className="muted">Lade…</p>;
   if (!view || !c) return <p>Pet #{idParam} existiert nicht (verbrannt oder nie gemintet).</p>;
@@ -122,20 +141,38 @@ export default function PetPage() {
           <p className="muted small">
             +20 XP pro Aktion (bei Zufriedenheit unter 50 weniger). Die meistgenutzte Aktion bestimmt den Fokus-Stat beim
             nächsten Level-Up (+3 statt +1).
-            {timing && ` Cooldown ${timing.cooldown}s, max. ${timing.maxPerDay} Aktionen/Tag (heute: ${Number(pet.actionsToday)}).`}
+            {care_ && ` Jede Aktion ${care_.maxPerDay}× pro Tag, Cooldown ${cd ?? "…"}s bei diesem Level, Gebühr ${formatEther(care_.fee)} ETH pro Pflege.`}
           </p>
+          {cdLeft > 0 && <p className="small">⏳ Cooldown noch {cdLeft}s{care_ && care_.products > 0n ? " (Pflegeprodukt verkürzt auf ¼)" : ""}</p>}
+          {care_ && (
+            <div className="row wrap small">
+              <span>🧴 Pflegeprodukte: {care_.products.toString()}</span>
+              <button
+                className="btn small"
+                disabled={!!tx.pending}
+                onClick={() => tx.send("Pflegeprodukt kaufen", { ...c.PetNFT, functionName: "buyProducts", args: [1n], value: care_.productPrice })}
+              >
+                +1 kaufen ({formatEther(care_.productPrice)} ETH)
+              </button>
+              <span className="muted">Verkürzt den Cooldown einer Pflege auf ¼ – wird nur verbraucht, wenn nötig.</span>
+            </div>
+          )}
           <div className="row wrap">
             {ACTIONS.map((a, i) => (
               <button
                 key={a.label}
                 className="btn"
-                disabled={!!tx.pending || !canCare || !housing || housing.houseId === 0n}
+                disabled={!!tx.pending || !canCare || !housing || housing.houseId === 0n || (care_ ? (care_.done[i] ?? 0) >= care_.maxPerDay : false)}
                 onClick={async () => {
                   setAwake(true);
                   await care(id!, housing!.houseId, i, a.label);
                 }}
               >
-                {a.emoji} {a.label} <span className="muted">({a.stat}, Fokus {Number(pet.focus[i])})</span>
+                {a.emoji} {a.label}{" "}
+                <span className="muted">
+                  ({a.stat}, Fokus {Number(pet.focus[i])}
+                  {care_ && (care_.done[i] ?? 0) >= care_.maxPerDay ? ", heute erledigt" : ""})
+                </span>
               </button>
             ))}
           </div>

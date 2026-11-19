@@ -66,6 +66,7 @@ export async function sendAsCaretaker(args: {
   target: { address: Address; abi: Abi };
   functionName: "interact" | "moveIn" | "moveOut";
   args: readonly unknown[];
+  value?: bigint;
 }) {
   const wallet = createWalletClient({
     account: privateKeyToAccount(caretakerKey()),
@@ -77,6 +78,7 @@ export async function sendAsCaretaker(args: {
     abi: args.target.abi,
     functionName: args.functionName,
     args: args.args,
+    value: args.value,
   });
   const rc = await args.pc.waitForTransactionReceipt({ hash });
   if (rc.status !== "success") throw new Error("Transaktion revertiert");
@@ -84,7 +86,7 @@ export async function sendAsCaretaker(args: {
 }
 
 /** Pflege senden: signiert lokal mit dem Caretaker-Schluessel, Gas zahlt der Caretaker (vom PC beim Koppeln befuellt) */
-export function sendCare(args: {
+export async function sendCare(args: {
   pc: PublicClient;
   chain: Chain;
   pets: { address: Address; abi: Abi };
@@ -93,11 +95,14 @@ export function sendCare(args: {
   expiry: bigint;
   signature: Hex;
 }) {
+  // Pflegegebuehr zahlt der Caretaker-Schluessel (Guthaben vom PC beim Koppeln)
+  const value = (await args.pc.readContract({ ...args.pets, functionName: "careFee" })) as bigint;
   return sendAsCaretaker({
     pc: args.pc,
     chain: args.chain,
     target: args.pets,
     functionName: "interact",
     args: [args.petId, args.action, args.expiry, args.signature],
+    value,
   });
 }

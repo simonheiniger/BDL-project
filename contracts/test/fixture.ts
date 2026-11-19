@@ -93,7 +93,7 @@ export async function signScan(houses: PetHouse, player: string, petId: bigint, 
 export async function care(pets: PetNFT, who: HardhatEthersSigner, id: bigint, action = 3) {
   const houses = await ethers.getContractAt("PetHouse", await pets.houses());
   const { expiry, sig } = await signScan(houses, who.address, id);
-  return pets.connect(who).interact(id, action, expiry, sig);
+  return pets.connect(who).interact(id, action, expiry, sig, { value: await pets.careFee() });
 }
 
 /** n Pflegen mit Scan */

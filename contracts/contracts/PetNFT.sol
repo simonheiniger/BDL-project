@@ -49,8 +49,22 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     IERC6551Registry public immutable registry;
     address public immutable accountImpl;
     uint256 public immutable mintPrice;
-    uint256 public immutable cooldown; // Sekunden zwischen Aktionen
+    /// @notice Cooldown bei Max-Level in Sekunden; bei Level 1 gilt MIN_COOLDOWN, dazwischen linear. 0 = kein Cooldown (Tests).
+    uint256 public immutable cooldown;
+    /// @notice Wie oft jede einzelne Pflegeaktion pro Tag erlaubt ist (Produktion: 1).
     uint256 public immutable maxActionsPerDay;
+    uint256 public constant MIN_COOLDOWN = 5;
+    /// @notice Mit Pflegeprodukt gilt nur noch 1/PRODUCT_SPEEDUP des Cooldowns.
+    uint256 public constant PRODUCT_SPEEDUP = 4;
+
+    /// @notice Gebuehr pro Pflegeaktion (wird mit `interact` mitgeschickt, bleibt im Contract)
+    uint256 public careFee = 0.0002 ether;
+    /// @notice Preis pro Pflegeprodukt
+    uint256 public productPrice = 0.001 ether;
+    /// @notice Pflegeprodukte pro Besitzer: eines verkuerzt den Cooldown einer Pflege auf 1/PRODUCT_SPEEDUP
+    mapping(address => uint256) public careProducts;
+    /// @dev Pflegen pro Aktion im laufenden Tagesfenster (Fenster = Pet.dayStart)
+    mapping(uint256 => uint16[4]) private _doneToday;
 
     address public cosmetics;
     address public trophy;
@@ -78,6 +92,9 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
     event Equipped(uint256 indexed petId, uint8 itemId);
     event RendererChanged(address renderer);
     event CaretakerSet(address indexed owner, address indexed caretaker, uint64 until);
+    event ProductsBought(address indexed buyer, uint256 amount);
+    event ProductUsed(address indexed owner, uint256 indexed petId);
+    event FeesChanged(uint256 careFee, uint256 productPrice);
 
     error WrongPayment();
     error NotPetOwner();
@@ -208,20 +225,58 @@ contract PetNFT is ERC721, Ownable, ReentrancyGuard {
 
     // ------------------------------------------------------------------ Pflege-Loop
 
+    /// @notice Cooldown nach einer Pflege: 5 s bei Level 1, linear bis `cooldown` bei Max-Level.
+    function cooldownFor(uint256 level) public view returns (uint256) {
+        if (cooldown == 0) return 0;
+        uint256 max = cooldown > MIN_COOLDOWN ? cooldown : MIN_COOLDOWN;
+        uint256 l = level < 1 ? 1 : level;
+        return MIN_COOLDOWN + (max - MIN_COOLDOWN) * (l - 1) / (GameMath.MAX_LEVEL - 1);
+    }
+
+    /// @notice Pflegeprodukte kaufen: jedes verkuerzt den Cooldown einer Pflege (wird automatisch verbraucht, wenn es hilft).
+    function buyProducts(uint256 amount) external payable {
+        if (amount == 0 || msg.value != productPrice * amount) revert WrongPayment();
+        careProducts[msg.sender] += amount;
+        emit ProductsBought(msg.sender, amount);
+    }
+
+    function setFees(uint256 careFee_, uint256 productPrice_) external onlyOwner {
+        careFee = careFee_;
+        productPrice = productPrice_;
+        emit FeesChanged(careFee_, productPrice_);
+    }
+
+    /// @notice Anzahl Pflegen pro Aktion im laufenden Tagesfenster
+    function doneToday(uint256 petId) external view returns (uint16[4] memory d) {
+        Pet storage p = _pets[petId];
+        if (block.timestamp < p.dayStart + 1 days) d = _doneToday[petId];
+    }
+
     /// @notice Pflegen: +20 XP (skaliert mit Zufriedenheit), zaehlt fuer den Fokus-Stat des naechsten Level-Ups.
+    ///         Kostet `careFee`. Jede Aktion nur `maxActionsPerDay` mal pro Tag, dazwischen levelabhaengiger Cooldown.
     /// @param expiry/sig Scan-Beweis: Signatur des NFC-Chips vom Haus, in dem das Pet wohnt (siehe PetHouse.scan)
-    function interact(uint256 petId, Action action, uint256 expiry, bytes calldata sig) external {
+    function interact(uint256 petId, Action action, uint256 expiry, bytes calldata sig) external payable {
         address petOwner = ownerOf(petId);
         if (petOwner != msg.sender && !isCaretaker(petOwner, msg.sender)) revert NotPetOwner();
+        if (msg.value != careFee) revert WrongPayment();
         Pet storage p = _pets[petId];
         if (p.level >= GameMath.MAX_LEVEL) revert MaxLevel();
-        if (block.timestamp < p.lastAction + cooldown) revert Cooldown();
+
+        uint256 cd = cooldownFor(p.level);
+        if (block.timestamp < p.lastAction + cd) {
+            // Pflegeprodukt: verkuerzter Cooldown, Verbrauch nur wenn es wirklich hilft
+            if (careProducts[petOwner] == 0 || block.timestamp < p.lastAction + cd / PRODUCT_SPEEDUP) revert Cooldown();
+            careProducts[petOwner]--;
+            emit ProductUsed(petOwner, petId);
+        }
 
         if (block.timestamp >= p.dayStart + 1 days) {
             p.dayStart = uint64(block.timestamp);
             p.actionsToday = 0;
+            delete _doneToday[petId];
         }
-        if (p.actionsToday >= maxActionsPerDay) revert DailyLimit();
+        if (_doneToday[petId][uint8(action)] >= maxActionsPerDay) revert DailyLimit();
+        _doneToday[petId][uint8(action)]++;
 
         // NFC-Scan zwingend. Zufriedenheit (vor dieser Pflege) skaliert den XP-Ertrag: <50 -> 50..100 %, sonst 100 %.
         // Bessere Haeuser geben nie mehr als 100 %, sie halten nur laenger zufrieden (kein Pay-to-Win).

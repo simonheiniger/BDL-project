@@ -20,7 +20,7 @@ import {
 const fast = () => deployAll();
 const decodeUri = (uri: string) => JSON.parse(Buffer.from(uri.split(",")[1], "base64").toString());
 const attrs = (json: any) => Object.fromEntries(json.attributes.map((a: any) => [a.trait_type, a.value]));
-const prod = () => deployAll(60n, 6n);
+const prod = () => deployAll(180n, 1n);
 
 describe("ERC-6551: Registry + PetAccount", () => {
   it("Mint erzeugt TBA an deterministischer Adresse, gebunden an das Pet", async () => {
@@ -131,19 +131,37 @@ describe("PetNFT: Mint + Pflege-Loop", () => {
     await expect(care(pets, bob, id, 0)).to.be.revertedWithCustomError(pets, "NotPetOwner");
   });
 
-  it("Cooldown + Tageslimit (Produktions-Config 60s / 6 pro Tag)", async () => {
+  it("Pflege: jede Aktion 1x/Tag, Cooldown 5s (Lv1) bis 180s (Lv50), kostet Gebuehr", async () => {
     const { pets, alice } = await loadFixture(prod);
     const { id } = await mintPet(pets, alice);
+    expect(await pets.cooldownFor(1)).to.equal(5n);
+    expect(await pets.cooldownFor(50)).to.equal(180n);
+    await expect(pets.connect(alice).interact(id, 3, 0, "0x")).to.be.revertedWithCustomError(pets, "WrongPayment");
     await care(pets, alice, id, 3);
-    await expect(care(pets, alice, id, 3)).to.be.revertedWithCustomError(pets, "Cooldown");
-    for (let i = 0; i < 5; i++) {
-      await time.increase(61);
-      await care(pets, alice, id, 3);
-    }
-    await time.increase(61);
+    await expect(care(pets, alice, id, 0)).to.be.revertedWithCustomError(pets, "Cooldown");
+    await time.increase(6);
     await expect(care(pets, alice, id, 3)).to.be.revertedWithCustomError(pets, "DailyLimit");
+    for (const a of [0, 1, 2]) {
+      await care(pets, alice, id, a);
+      await time.increase(10);
+    }
+    expect((await pets.doneToday(id)).map(Number)).to.deep.equal([1, 1, 1, 1]);
     await time.increase(86400);
     await care(pets, alice, id, 3);
+  });
+
+  it("Pflegeprodukt verkuerzt den Cooldown auf 1/4 und wird nur verbraucht, wenn es hilft", async () => {
+    const { pets, alice } = await loadFixture(prod);
+    const { id } = await mintPet(pets, alice);
+    await expect(pets.connect(alice).buyProducts(2, { value: 1 })).to.be.revertedWithCustomError(pets, "WrongPayment");
+    await pets.connect(alice).buyProducts(2, { value: 2n * (await pets.productPrice()) });
+    await care(pets, alice, id, 3);
+    await time.increase(5); // Cooldown 5s vorbei -> kein Produkt noetig
+    await care(pets, alice, id, 0);
+    expect(await pets.careProducts(alice.address)).to.equal(2n);
+    // Lv1-Cooldown 5s / 4 = 1s -> sofort mit Produkt moeglich (naechster Block >= +1s)
+    await care(pets, alice, id, 1);
+    expect(await pets.careProducts(alice.address)).to.equal(1n);
   });
 
   it("tokenURI: gueltiges on-chain JSON mit Traits, Stufe Ei bei Lv 1", async () => {
@@ -514,27 +532,27 @@ describe("PetHouse: NFC-Haus, Kapazitaet, Zufriedenheit", () => {
     // Signatur mit falschem Schluessel (z.B. kopierte/erfundene URL)
     const bad = await signScan(houses, alice.address, id);
     const forged = ethers.hexlify(ethers.randomBytes(65));
-    await expect(pets.connect(alice).interact(id, 3, bad.expiry, forged)).to.be.reverted;
+    await expect(pets.connect(alice).interact(id, 3, bad.expiry, forged, { value: await pets.careFee() })).to.be.reverted;
 
     // abgelaufen
     const old = await signScan(houses, alice.address, id, 10);
     await time.increase(60);
-    await expect(pets.connect(alice).interact(id, 3, old.expiry, old.sig)).to.be.revertedWithCustomError(
+    await expect(pets.connect(alice).interact(id, 3, old.expiry, old.sig, { value: await pets.careFee() })).to.be.revertedWithCustomError(
       houses,
       "ScanExpired",
     );
 
     // Replay: gleiche Signatur nur einmal
     const ok = await signScan(houses, alice.address, id);
-    await pets.connect(alice).interact(id, 3, ok.expiry, ok.sig);
-    await expect(pets.connect(alice).interact(id, 3, ok.expiry, ok.sig)).to.be.revertedWithCustomError(
+    await pets.connect(alice).interact(id, 3, ok.expiry, ok.sig, { value: await pets.careFee() });
+    await expect(pets.connect(alice).interact(id, 3, ok.expiry, ok.sig, { value: await pets.careFee() })).to.be.revertedWithCustomError(
       houses,
       "BadScan",
     );
 
     // Signatur an Spieler gebunden: Bob kann Alices Scan nicht benutzen
     const forAlice = await signScan(houses, alice.address, id);
-    await expect(pets.connect(bob).interact(id, 3, forAlice.expiry, forAlice.sig)).to.be.revertedWithCustomError(
+    await expect(pets.connect(bob).interact(id, 3, forAlice.expiry, forAlice.sig, { value: await pets.careFee() })).to.be.revertedWithCustomError(
       pets,
       "NotPetOwner",
     );
@@ -646,7 +664,7 @@ describe("Caretaker (Handy-App darf nur pflegen)", () => {
   };
   const careAs = async (pets: any, houses: any, phone: any, owner: string, id: bigint) => {
     const { expiry, sig } = await signScan(houses, owner, id);
-    return pets.connect(phone).interact(id, 3, expiry, sig);
+    return pets.connect(phone).interact(id, 3, expiry, sig, { value: await pets.careFee() });
   };
 
   it("Besitzer berechtigt Handy-Schluessel und schickt Gas mit; Handy pflegt, Scan bleibt Pflicht", async () => {
@@ -660,7 +678,7 @@ describe("Caretaker (Handy-App darf nur pflegen)", () => {
 
     await expect(careAs(pets, houses, phone, alice.address, id)).to.emit(pets, "Interacted");
     // ohne gueltigen Chip-Scan geht es auch fuer den Caretaker nicht
-    await expect(pets.connect(phone).interact(id, 3, until, ethers.hexlify(ethers.randomBytes(65)))).to.be.reverted;
+    await expect(pets.connect(phone).interact(id, 3, until, ethers.hexlify(ethers.randomBytes(65)), { value: await pets.careFee() })).to.be.reverted;
   });
 
   it("Caretaker darf nichts ausser pflegen (kein Transfer, keine Fusion, keine neue Berechtigung)", async () => {

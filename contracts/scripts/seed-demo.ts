@@ -52,7 +52,7 @@ async function main() {
   for (const [id, n, action] of plan) {
     for (let i = 0; i < n; i++) {
       const { expiry, sig } = await signScan(houses, tags[villa.toString()], me.address, id);
-      await (await pets.interact(id, action, expiry, sig)).wait();
+      await (await pets.interact(id, action, expiry, sig, { value: await pets.careFee() })).wait();
     }
     console.log(`Pet #${id} -> Level ${(await pets.getPet(id)).level}`);
   }

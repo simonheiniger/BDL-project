@@ -148,8 +148,8 @@ function CompanionPet({ petId, owner, houseScanTick }: { petId: bigint; owner: A
 function friendlyCaretakerError(e: unknown): string {
   const raw = e instanceof Error ? `${e.message}` : String(e);
   if (/NotPetOwner/.test(raw)) return "Berechtigung abgelaufen oder widerrufen. Am PC neu freigeben.";
-  if (/Cooldown/.test(raw)) return "Noch Cooldown – gleich nochmal versuchen.";
-  if (/DailyLimit/.test(raw)) return "Tageslimit erreicht.";
+  if (/Cooldown/.test(raw)) return "Noch Cooldown – gleich nochmal versuchen (oder am PC Pflegeprodukt kaufen).";
+  if (/DailyLimit/.test(raw)) return "Diese Aktion hast du heute schon gemacht.";
   if (/insufficient funds|exceeds the balance/i.test(raw)) return "Kein Gas im Handy-Konto. Am PC „Handy freigeben“ mit etwas ETH erneut ausführen.";
   return friendlyError(e);
 }

@@ -258,6 +258,9 @@ export function friendlyError(e: unknown): string {
       "Lösung: MetaMask → Einstellungen → Erweitert → „Aktivitäts-Tab-Daten löschen“, dann nochmal versuchen."
     );
   }
+  if (/Cooldown/.test(raw)) return "Noch Cooldown – kurz warten oder ein Pflegeprodukt benutzen.";
+  if (/DailyLimit/.test(raw)) return "Diese Aktion hast du heute schon gemacht. Probier eine andere oder warte bis morgen.";
+  if (/WrongPayment/.test(raw)) return "Falscher Betrag für die Pflegegebühr.";
   if (/NotHoused/.test(raw)) return "Dieses Pet wohnt in keinem Haus. Erst einziehen lassen.";
   if (/HouseFull/.test(raw)) return "Das Haus ist voll. Bessere Häuser haben mehr Plätze.";
   if (/NotHouseOwner/.test(raw)) return "Dieses Haus gehört dir nicht.";
@@ -354,6 +357,7 @@ export function useCare(tx: ReturnType<typeof useTx>) {
     } finally {
       tx.setPending(null);
     }
-    return tx.send(label, { ...c.PetNFT, functionName: "interact", args: [petId, action, expiry, signature] });
+    const value = (await pc.readContract({ ...c.PetNFT, functionName: "careFee" })) as bigint;
+    return tx.send(label, { ...c.PetNFT, functionName: "interact", args: [petId, action, expiry, signature], value });
   };
 }
